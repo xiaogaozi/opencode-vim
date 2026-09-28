@@ -1,9 +1,31 @@
 import { parseKeySequence } from "@vimee/core"
+import { DEFAULT_ENGLISH_PATTERN, DEFAULT_OTHER_PATTERN } from "./context"
 import type { VimMode } from "./state"
 
 export type VimCursorStyle = {
     style: "block" | "line" | "underline" | "default"
     blinking?: boolean
+}
+
+export type VimInputSourceCursorColors = {
+    english?: string
+    other?: string
+}
+
+export type VimInputSource = {
+    enabled: boolean
+    normal: string
+    insert?: string
+    command?: string
+    getCommand?: string
+    setCommand?: string
+    waitMs?: number
+    context: boolean
+    contextAggressiveLine: boolean
+    englishPattern: string
+    otherPattern: string
+    pollInterval: number
+    cursorColors: VimInputSourceCursorColors
 }
 
 export type VimConfig = {
@@ -13,6 +35,7 @@ export type VimConfig = {
     keymapTimeout: number
     pendingDisplayDelay: number
     cursorStyles: Record<VimMode, VimCursorStyle>
+    inputSource: VimInputSource
     debug: boolean
     debugPath?: string
     keymaps: VimKeymaps
@@ -25,6 +48,7 @@ export type VimOptions = {
     keymapTimeout?: number
     pendingDisplayDelay?: number
     cursorStyles?: Partial<Record<VimMode, VimCursorStyle>>
+    inputSource?: VimInputSource
     debug?: boolean
     debugPath?: string
     keymaps?: VimKeymaps
@@ -44,6 +68,17 @@ const DEFAULT_CURSOR_STYLES: Record<VimMode, VimCursorStyle> = {
     "visual-line": { style: "block", blinking: true },
 }
 
+export const DEFAULT_INPUT_SOURCE: VimInputSource = {
+    enabled: false,
+    normal: "",
+    context: true,
+    contextAggressiveLine: true,
+    englishPattern: DEFAULT_ENGLISH_PATTERN,
+    otherPattern: DEFAULT_OTHER_PATTERN,
+    pollInterval: 0,
+    cursorColors: {},
+}
+
 export function createVimConfig(options: unknown): VimConfig {
     const input = readOptions(options)
     return {
@@ -58,6 +93,7 @@ export function createVimConfig(options: unknown): VimConfig {
             visual: { ...DEFAULT_CURSOR_STYLES.visual, ...input.cursorStyles?.visual },
             "visual-line": { ...DEFAULT_CURSOR_STYLES["visual-line"], ...input.cursorStyles?.["visual-line"] },
         },
+        inputSource: input.inputSource ?? DEFAULT_INPUT_SOURCE,
         debug: input.debug ?? process.env.VIM_PROMPT_DEBUG === "1",
         debugPath: input.debugPath,
         keymaps: input.keymaps ?? {},
@@ -77,6 +113,7 @@ function readOptions(options: unknown): VimOptions {
         keymapTimeout: readNumber(source.keymapTimeout),
         pendingDisplayDelay: typeof source.pendingDisplayDelay === "number" ? source.pendingDisplayDelay : undefined,
         cursorStyles: readCursorStyles(source.cursorStyles),
+        inputSource: readInputSource(source.inputSource),
         debug: typeof source.debug === "boolean" ? source.debug : undefined,
         debugPath: typeof source.debugPath === "string" ? source.debugPath : undefined,
         keymaps: readKeymaps(source.keymaps),
@@ -132,6 +169,64 @@ function readCursorStyle(input: unknown): VimCursorStyle | undefined {
         style: source.style,
         blinking: typeof source.blinking === "boolean" ? source.blinking : undefined,
     }
+}
+
+function readInputSource(input: unknown): VimInputSource | undefined {
+    if (!input || typeof input !== "object") return undefined
+    const source = input as Record<string, unknown>
+    const normal = readString(source.normal)
+
+    return {
+        enabled: source.enabled === true && !!normal,
+        normal: normal ?? "",
+        insert: readString(source.insert),
+        command: readString(source.command),
+        getCommand: readString(source.getCommand),
+        setCommand: readString(source.setCommand),
+        waitMs: readNonNegative(source.waitMs),
+        context: typeof source.context === "boolean" ? source.context : true,
+        contextAggressiveLine: typeof source.contextAggressiveLine === "boolean" ? source.contextAggressiveLine : true,
+        englishPattern: readPattern(source.englishPattern, DEFAULT_ENGLISH_PATTERN),
+        otherPattern: readPattern(source.otherPattern, DEFAULT_OTHER_PATTERN),
+        pollInterval: readNonNegative(source.pollInterval) ?? 0,
+        cursorColors: readCursorColors(source.cursorColors),
+    }
+}
+
+function readCursorColors(input: unknown): VimInputSourceCursorColors {
+    if (!input || typeof input !== "object") return {}
+    const source = input as Record<string, unknown>
+    return {
+        english: readColor(source.english),
+        other: readColor(source.other),
+    }
+}
+
+function readString(input: unknown): string | undefined {
+    if (typeof input !== "string") return undefined
+    const value = input.trim()
+    return value.length > 0 ? value : undefined
+}
+
+function readColor(input: unknown): string | undefined {
+    const value = readString(input)
+    if (!value || !/^#[0-9a-fA-F]{3,8}$/.test(value)) return undefined
+    return value
+}
+
+function readPattern(input: unknown, fallback: string): string {
+    const value = readString(input)
+    if (!value) return fallback
+    try {
+        new RegExp(value)
+        return value
+    } catch {
+        return fallback
+    }
+}
+
+function readNonNegative(input: unknown): number | undefined {
+    return typeof input === "number" && Number.isFinite(input) && input >= 0 ? input : undefined
 }
 
 function isCursorStyle(value: unknown): value is VimCursorStyle["style"] {
