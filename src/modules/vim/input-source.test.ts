@@ -14,6 +14,7 @@ function testConfig(overrides: Partial<VimInputSource> = {}): VimInputSource {
         otherPattern: DEFAULT_OTHER_PATTERN,
         pollInterval: 0,
         cursorColors: {},
+        indicator: true,
         ...overrides,
     }
 }
@@ -66,7 +67,7 @@ describe("input source controller", () => {
         controller.sync("insert", { text: "", position: 0 })
         await controller.settle()
 
-        expect(fake.calls).toEqual([])
+        expect(fake.calls).toEqual(["get"])
     })
 
     test("remembers the insert source and restores it", async () => {
@@ -76,11 +77,11 @@ describe("input source controller", () => {
         controller.sync("insert", { text: "", position: 0 })
         controller.sync("normal")
         await controller.settle()
-        expect(fake.calls).toEqual(["get", "set:im.us"])
+        expect(fake.calls).toEqual(["get", "get", "set:im.us"])
 
         controller.sync("insert", { text: "中文", position: 2 })
         await controller.settle()
-        expect(fake.calls).toEqual(["get", "set:im.us", "set:im.cn"])
+        expect(fake.calls).toEqual(["get", "get", "set:im.us", "set:im.cn"])
     })
 
     test("context english keeps the normal source", async () => {
@@ -143,7 +144,9 @@ describe("input source controller", () => {
         fake.releaseGet()
         await controller.settle()
 
-        expect(fake.calls).toEqual(["get", "set:im.cn"])
+        // The initial read already reported im.cn, so the coalesced insert
+        // request needs no switch and the normal switch is skipped.
+        expect(fake.calls).toEqual(["get", "get"])
     })
 
     test("reset returns to the normal source", async () => {

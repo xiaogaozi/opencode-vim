@@ -50,10 +50,20 @@ export function createInputSourceController(config: VimInputSource, deps: InputS
     let lastOther: string | undefined
     let pending: Job | undefined
     let running: Promise<void> | undefined
+    let initial: Promise<void> | undefined
     let pollTimer: ReturnType<typeof setInterval> | undefined
     let notified = false
 
     if (config.enabled && !runner) notifyOnce(MISSING_HELPER_MESSAGE)
+    if (config.enabled && runner) {
+        const task = poll()
+        initial = task
+        void task
+            .catch(() => {})
+            .finally(() => {
+                if (initial === task) initial = undefined
+            })
+    }
 
     return { source, sync, setActive, reset, settle, dispose }
 
@@ -98,7 +108,10 @@ export function createInputSourceController(config: VimInputSource, deps: InputS
     }
 
     async function settle() {
-        while (running) await running
+        while (running || initial) {
+            if (running) await running
+            else if (initial) await initial
+        }
     }
 
     async function dispose() {

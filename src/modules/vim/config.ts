@@ -26,6 +26,7 @@ export type VimInputSource = {
     otherPattern: string
     pollInterval: number
     cursorColors: VimInputSourceCursorColors
+    indicator: boolean
 }
 
 export type VimConfig = {
@@ -77,6 +78,7 @@ export const DEFAULT_INPUT_SOURCE: VimInputSource = {
     otherPattern: DEFAULT_OTHER_PATTERN,
     pollInterval: 0,
     cursorColors: {},
+    indicator: true,
 }
 
 export function createVimConfig(options: unknown): VimConfig {
@@ -190,6 +192,7 @@ function readInputSource(input: unknown): VimInputSource | undefined {
         otherPattern: readPattern(source.otherPattern, DEFAULT_OTHER_PATTERN),
         pollInterval: readNonNegative(source.pollInterval) ?? 0,
         cursorColors: readCursorColors(source.cursorColors),
+        indicator: typeof source.indicator === "boolean" ? source.indicator : true,
     }
 }
 

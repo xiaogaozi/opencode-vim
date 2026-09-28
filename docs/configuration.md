@@ -116,6 +116,9 @@ automatically. Example configuration inside `options.vim`:
   input source. An empty color restores the terminal default. Cursor color
   needs a terminal that supports `OSC 12` (iTerm2, kitty, WezTerm, Ghostty,
   and others).
+- `indicator` (default `true`) shows a `中`/`EN` badge in the prompt footer.
+  Some terminals, including Warp, parse `OSC 12` but never render cursor color
+  changes; the footer badge works everywhere.
 - `command`, `getCommand`, and `setCommand` override the detected helper.
   `setCommand` may contain `{source}`; without it the source id is appended.
   `waitMs` is appended after the source id as an extra argument (macism's

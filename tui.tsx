@@ -59,6 +59,8 @@ function VimHost(props: { context: Context }) {
         <VimStatus
           mode={() => dialogFocused() ? dialogState.mode() : state.mode()}
           enabled={enabled}
+          source={inputSource.source}
+          inputSource={config.inputSource}
           theme={compatTheme(props.context)}
         />
       ) : null,
