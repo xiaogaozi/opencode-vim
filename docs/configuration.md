@@ -119,7 +119,9 @@ automatically. Example configuration inside `options.vim`:
 - `command`, `getCommand`, and `setCommand` override the detected helper.
   `setCommand` may contain `{source}`; without it the source id is appended.
   `waitMs` is appended after the source id as an extra argument (macism's
-  macOS 26 workaround delay).
+  macOS 26 workaround delay). Set `waitMs` to `0` to skip macism's
+  `TemporaryWindow` workaround, which on some macOS 26 setups fails to switch
+  CJK sources.
 
 The plugin resets to the `normal` source and the default cursor color when Vim
 mode is disabled or the plugin unloads. Switching does not apply over SSH,
