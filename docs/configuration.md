@@ -109,9 +109,10 @@ automatically. Example configuration inside `options.vim`:
   text right after an English word stays English, and ambiguous contexts fall
   back to `insert` or the remembered source. `englishPattern`, `otherPattern`,
   and `contextAggressiveLine` tune the detection.
-- `pollInterval` in milliseconds (default `0`, disabled) re-reads the input
-  source while editing, so manual switches (for example with `Ctrl+Space`) also
-  update the cursor color and are remembered.
+- `pollInterval` in milliseconds (default `500`) re-reads the input source while
+  editing, so manual switches (for example with `Ctrl+Space`) also update the
+  footer indicator and cursor color and are remembered. Set it to `0` to disable
+  polling.
 - `cursorColors.english` / `cursorColors.other` set the cursor color per active
   input source. An empty color restores the terminal default. Cursor color
   needs a terminal that supports `OSC 12` (iTerm2, kitty, WezTerm, Ghostty,

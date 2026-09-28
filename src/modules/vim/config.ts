@@ -69,6 +69,8 @@ const DEFAULT_CURSOR_STYLES: Record<VimMode, VimCursorStyle> = {
     "visual-line": { style: "block", blinking: true },
 }
 
+const DEFAULT_POLL_INTERVAL = 500
+
 export const DEFAULT_INPUT_SOURCE: VimInputSource = {
     enabled: false,
     normal: "",
@@ -76,7 +78,7 @@ export const DEFAULT_INPUT_SOURCE: VimInputSource = {
     contextAggressiveLine: true,
     englishPattern: DEFAULT_ENGLISH_PATTERN,
     otherPattern: DEFAULT_OTHER_PATTERN,
-    pollInterval: 0,
+    pollInterval: DEFAULT_POLL_INTERVAL,
     cursorColors: {},
     indicator: true,
 }
@@ -190,7 +192,7 @@ function readInputSource(input: unknown): VimInputSource | undefined {
         contextAggressiveLine: typeof source.contextAggressiveLine === "boolean" ? source.contextAggressiveLine : true,
         englishPattern: readPattern(source.englishPattern, DEFAULT_ENGLISH_PATTERN),
         otherPattern: readPattern(source.otherPattern, DEFAULT_OTHER_PATTERN),
-        pollInterval: readNonNegative(source.pollInterval) ?? 0,
+        pollInterval: readNonNegative(source.pollInterval) ?? DEFAULT_POLL_INTERVAL,
         cursorColors: readCursorColors(source.cursorColors),
         indicator: typeof source.indicator === "boolean" ? source.indicator : true,
     }
