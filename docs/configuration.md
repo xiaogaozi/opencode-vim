@@ -33,6 +33,7 @@ All options below belong inside `options.vim`.
 | `keymapTimeout` | `500` | Milliseconds to wait for the rest of a custom mapping |
 | `keymaps` | `{}` | Custom mappings, grouped by mode |
 | `cursorStyles` | See below | Cursor appearance for each editing mode |
+| `inputSource` | disabled | Switch the OS input method per editing mode; see below |
 | `debug` | `false` | Enable debug logging |
 | `debugPath` | `~/.cache/opencode/opencode-vim.log` | Debug log file |
 
@@ -70,6 +71,59 @@ For example, add this inside `options.vim` to disable cursor blinking:
   }
 }
 ```
+
+### Input source (IME) switching
+
+`inputSource` switches the OS input method when the editor changes modes. It
+needs an external command that can get and set the input source. On macOS the
+recommended helper is [macism](https://github.com/laishulu/macism), the same
+tool used by `emacs-smart-input-source`:
+
+```sh
+brew tap laishulu/homebrew
+brew install macism
+```
+
+The command with no arguments must print the current source id, and with a
+source id argument must switch to it. `macism` and `im-select` are detected
+automatically. Example configuration inside `options.vim`:
+
+```json
+{
+  "inputSource": {
+    "enabled": true,
+    "normal": "com.apple.keylayout.ABC",
+    "insert": "com.apple.inputmethod.SCIM.ITABC",
+    "cursorColors": {
+      "other": "#00cc66"
+    }
+  }
+}
+```
+
+- `normal` is used for normal, visual, and visual-line modes.
+- `insert` is used for insert mode. Leave it out to restore the last input
+  source that was active when insert mode was left.
+- `context` (default `true`) looks at the characters around the cursor when
+  entering insert mode: text right after a Chinese character stays Chinese,
+  text right after an English word stays English, and ambiguous contexts fall
+  back to `insert` or the remembered source. `englishPattern`, `otherPattern`,
+  and `contextAggressiveLine` tune the detection.
+- `pollInterval` in milliseconds (default `0`, disabled) re-reads the input
+  source while editing, so manual switches (for example with `Ctrl+Space`) also
+  update the cursor color and are remembered.
+- `cursorColors.english` / `cursorColors.other` set the cursor color per active
+  input source. An empty color restores the terminal default. Cursor color
+  needs a terminal that supports `OSC 12` (iTerm2, kitty, WezTerm, Ghostty,
+  and others).
+- `command`, `getCommand`, and `setCommand` override the detected helper.
+  `setCommand` may contain `{source}`; without it the source id is appended.
+  `waitMs` is appended after the source id as an extra argument (macism's
+  macOS 26 workaround delay).
+
+The plugin resets to the `normal` source and the default cursor color when Vim
+mode is disabled or the plugin unloads. Switching does not apply over SSH,
+because the helper runs on the machine that hosts the TUI.
 
 ### Debugging
 
