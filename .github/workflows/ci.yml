@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - dev
+      - custom
     types:
       - opened
       - synchronize
