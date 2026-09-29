@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import type { VimInputSource } from "./config"
-import { DEFAULT_ENGLISH_PATTERN, DEFAULT_OTHER_PATTERN } from "./context"
-import type { InputSourceRunner } from "./input-source"
-import { createInputSourceController, splitCommand } from "./input-source"
+import type { VimInputSource } from "../../src/modules/vim/config"
+import { DEFAULT_ENGLISH_PATTERN, DEFAULT_OTHER_PATTERN } from "../../src/modules/vim/context"
+import type { InputSourceRunner } from "../../src/modules/vim/input-source"
+import { createInputSourceController, splitCommand } from "../../src/modules/vim/input-source"
 
 function testConfig(overrides: Partial<VimInputSource> = {}): VimInputSource {
     return {

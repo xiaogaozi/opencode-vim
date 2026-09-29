@@ -28,7 +28,7 @@ git push origin main
 git checkout custom
 git rebase --update-refs upstream/main
 bun install
-bun run typecheck && bun test src test/plugin.test.tsx test/editor.test.ts
+bun run typecheck && bun test ./test/unit
 bun run build
 git push --force-with-lease origin custom
 ```

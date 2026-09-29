@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { DEFAULT_ENGLISH_PATTERN, DEFAULT_OTHER_PATTERN, detectContextLanguage } from "./context"
+import { DEFAULT_ENGLISH_PATTERN, DEFAULT_OTHER_PATTERN, detectContextLanguage } from "../../src/modules/vim/context"
 
 const patterns = {
     english: new RegExp(DEFAULT_ENGLISH_PATTERN),
