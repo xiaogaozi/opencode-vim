@@ -31,6 +31,12 @@ LazyVim; counts such as `3j` and operator motions such as `dj` use actual lines.
 
 Text objects include words and quotes, plus `iq`/`aq` for the nearest quote pair,
 `ip`/`ap` for paragraphs, and `ib`/`ab` or `iB`/`aB` for parentheses or braces.
+
+Word motions follow Vim's character classes. Chinese punctuation, kana, Hangul,
+full-width characters and emoji all act as word boundaries, so `w`, `b` and `e`
+step through CJK text and `dw` or `ciw` change the word under the cursor instead
+of a whole run of text.
+
 Yanks and cuts (`y`, `d`, `c`, `x`) write to the system clipboard. `p` and `P`
 read its current text, including text copied from another application. Counts,
 linewise puts, undo, and dot repeat still use Vim's editing behavior.
