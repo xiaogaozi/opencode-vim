@@ -27,6 +27,9 @@ to navigate, `Enter` to open an item, and `s` to return to the prompt.
 
 Use `/vim` to toggle the plugin on or off.
 
+Optional input method (IME) switching and per-mode cursor colors are configured
+through `options.vim`; see [Configuration](./docs/configuration.md).
+
 ## Documentation
 
 - [Keybindings and modes](./docs/vim-behavior.md)
