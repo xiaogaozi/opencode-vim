@@ -7,6 +7,7 @@ import type { VimLog } from "./log"
 import { createGraphemeCodec } from "./graphemes"
 import { displayToChar, displayWidth, createPromptMap, hostCharOffset, hostFromVimOffset, hostOffset, hostPosition, vimLineLength, vimOffsetFromPosition, type PromptMap } from "./map"
 import type { createVimState } from "./state"
+import { WORD_MOTION_KEYS, wordMotion, wordTextObject, type WordDecoder } from "./word-motions"
 
 type VimState = ReturnType<typeof createVimState>
 type HostAction = VimeeAction & { register?: string } | { type: "submit" } | { type: "command"; command: string }
@@ -422,10 +423,11 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
             return { newCtx: { ...resetContext(vim), cursor: range.end }, actions: [{ type: "cursor-move", position: range.end }] }
         }
         let wordRange: MotionRange | undefined
-        if (!ctrl && vim.mode !== "insert" && (key === "w" || key === "W") && (vim.phase === "idle" || vim.phase === "operator-pending")) {
-            wordRange = forwardWordRange(key, vim.cursor, buffer, vim.count || 1)
+        if (!ctrl && vim.mode !== "insert" && WORD_MOTION_KEYS.has(key) && (vim.phase === "idle" || vim.phase === "operator-pending")) {
+            const motion = wordMotion(key, vim.cursor, vim.count || 1, buffer, vim.operator, codec.decode)
+            wordRange = motion.range
             if (vim.phase === "idle") {
-                const cursor = { ...wordRange.end, col: Math.min(wordRange.end.col, Math.max(0, buffer.getLineLength(wordRange.end.line) - 1)) }
+                const cursor = { ...motion.cursor, col: Math.min(motion.cursor.col, Math.max(0, buffer.getLineLength(motion.cursor.line) - 1)) }
                 return { newCtx: { ...resetContext(vim), cursor }, actions: [{ type: "cursor-move", position: cursor }] }
             }
         }
@@ -467,20 +469,14 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
                     range = { start: vim.cursor, end: { line: vim.cursor.line, col: Math.min(buffer.getLineLength(vim.cursor.line), vim.cursor.col + count) }, inclusive: false, linewise: false }
                 } else if (key === operator) {
                     range = { start: { line: vim.cursor.line, col: 0 }, end: { line: Math.min(buffer.getLineCount() - 1, vim.cursor.line + count - 1), col: 0 }, inclusive: true, linewise: true }
-                } else if (operator === "c" && key === "w" && /\S/.test(buffer.getLine(vim.cursor.line)[vim.cursor.col] ?? "")) {
-                    range = resolveMotion("e", { ...vim.cursor, col: vim.cursor.col - 1 }, buffer, count, vim.count > 0, vim)?.range
-                    if (range) range.start = vim.cursor
                 } else if (wordRange) {
-                    range = wordRange
-                    if (operator === "d" && range.end.line > range.start.line && /\S/.test(buffer.getLine(range.start.line)[range.start.col] ?? "") && range.end.col === Math.max(0, buffer.getLine(range.end.line).search(/\S/))) {
-                        range.end = { line: range.end.line - 1, col: buffer.getLineLength(range.end.line - 1) }
-                    }
+                    range = wordOperatorRange(wordRange, buffer)
                 } else if (operator === "c") {
                     const motion = resolveMotion(key, vim.cursor, buffer, count, vim.count > 0, vim)
                     if (motion?.range.linewise) range = motion.range
                 }
             } else if (vim.phase === "text-object-pending" && vim.textObjectModifier) {
-                range = resolvePromptTextObject(vim.textObjectModifier, key, vim.cursor, buffer) ?? undefined
+                range = resolvePromptTextObject(vim.textObjectModifier, key, vim.cursor, buffer, codec.decode) ?? undefined
             }
         }
         if (range && operator) {
@@ -580,7 +576,7 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
 
     function handleTextObject(key: string, ctx: PromptContext, map: PromptMap) {
         if (vim.phase !== "text-object-pending" || !vim.textObjectModifier) return undefined
-        const range = resolvePromptTextObject(vim.textObjectModifier, key, vim.cursor, buffer)
+        const range = resolvePromptTextObject(vim.textObjectModifier, key, vim.cursor, buffer, codec.decode)
         if (!range) return undefined
 
         const flashRange = vim.operator === "y" ? motionHostRange(map, range) : undefined
@@ -726,28 +722,16 @@ function readOnlyKey(key: string, ctrl: boolean, vim: VimContext) {
     return /^[0-9hjklwWbBeE$^gGfFtT;,vVy%{}()"]$/.test(key) || ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(key)
 }
 
-function forwardWordRange(key: string, start: CursorPosition, buffer: TextBuffer, count: number): MotionRange {
-    let { line, col } = start
-    for (let index = 0; index < count; index++) {
-        const text = buffer.getLine(line)
-        const kind = wordClass(text[col], key === "W")
-        while (col < text.length && wordClass(text[col], key === "W") === kind) col++
-        while (col < text.length && /\s/.test(text[col])) col++
-        while (col >= buffer.getLineLength(line) && line < buffer.getLineCount() - 1) {
-            line++
-            col = 0
-            const next = buffer.getLine(line)
-            if (!next.length) break
-            while (col < next.length && /\s/.test(next[col])) col++
-            if (col < next.length) break
-        }
+function wordOperatorRange(range: MotionRange, buffer: TextBuffer): MotionRange {
+    // Vim's exclusive motions ending at column zero stop before the newline.
+    // Starting in the indent makes that range linewise instead.
+    const ordered = orderedRange(range)
+    if (range.inclusive || ordered.end.line === ordered.start.line || ordered.end.col !== 0) return range
+    const line = ordered.end.line - 1
+    if (ordered.start.col <= Math.max(0, buffer.getLine(ordered.start.line).search(/\S/))) {
+        return { start: ordered.start, end: { line, col: 0 }, linewise: true, inclusive: false }
     }
-    return { start, end: { line, col }, linewise: false, inclusive: false }
-}
-
-function wordClass(char: string | undefined, big: boolean) {
-    if (!char || /\s/.test(char)) return "space"
-    return big || /\w/.test(char) ? "word" : "punctuation"
+    return { start: ordered.start, end: { line, col: buffer.getLineLength(line) }, linewise: false, inclusive: false }
 }
 
 function visualCharRange(map: PromptMap, anchor: CursorPosition, cursor: CursorPosition): HostRange | undefined {
@@ -996,8 +980,9 @@ function textObjectOperator(operator: Operator): operator is "y" | "d" | "c" {
     return operator === "y" || operator === "d" || operator === "c"
 }
 
-function resolvePromptTextObject(modifier: "i" | "a", key: string, cursor: CursorPosition, buffer: TextBuffer): MotionRange | null {
+function resolvePromptTextObject(modifier: "i" | "a", key: string, cursor: CursorPosition, buffer: TextBuffer, decode: WordDecoder): MotionRange | null {
     if (key === "q") return quoteRange(modifier, cursor, buffer)
+    if (key === "w" || key === "W") return wordTextObject(modifier, cursor, key === "W", buffer, decode)
     if (key !== "p") return null
     return paragraphRange(modifier, cursor, buffer)
 }
