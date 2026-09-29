@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - main
+      - custom
     types:
       - opened
       - synchronize

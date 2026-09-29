@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { Plugin } from "@opencode/plugin/tui"
-import { InputRenderable, KeyEvent, PasteEvent, type CursorStyleOptions } from "@opentui/core"
+import { InputRenderable, KeyEvent, PasteEvent, RGBA, type CursorStyleOptions } from "@opentui/core"
 import { createEffect, createSignal, onCleanup, untrack } from "solid-js"
 import { applyVimCursorStyle, focusedInput } from "./modules/vim/actions"
 import { createVimConfig } from "./modules/vim/config"
@@ -14,6 +14,7 @@ import { VimStatus } from "./modules/vim/status"
 import { SESSION_MODE, createSessionMode } from "./session"
 import { createVimClipboard } from "./clipboard"
 import { createFormMode } from "./form"
+import { createInputSourceController } from "./modules/vim/input-source"
 
 type Context = Parameters<Parameters<typeof Plugin.define>[0]["setup"]>[0]
 
@@ -43,9 +44,14 @@ function VimHost(props: { context: Context }) {
   const form = createFormMode(props.context, config, log, enabled)
   const ctx = createCompatContext(props.context)
   let cursorMode = ""
+  let cursorColor: string | undefined
   let cursorInput: typeof props.context.renderer.currentFocusedEditor = null
   let originalCursorStyle: CursorStyleOptions | undefined
   const session = createSessionMode(props.context, config, clipboard)
+  const inputSource = createInputSourceController(config.inputSource, {
+    log,
+    notify: (message) => props.context.ui.toast.show({ message, variant: "warning" }),
+  })
   let pendingKeys: Array<KeyEvent | PasteEvent> | undefined
 
   const removeStatus = props.context.ui.slot({
@@ -55,6 +61,8 @@ function VimHost(props: { context: Context }) {
         <VimStatus
           mode={() => dialogFocused() ? dialogState.mode() : state.mode()}
           enabled={enabled}
+          source={inputSource.source}
+          inputSource={config.inputSource}
           theme={compatTheme(props.context)}
         />
       ) : null,
@@ -172,6 +180,7 @@ function VimHost(props: { context: Context }) {
     pendingKeys = undefined
     vimee.suspend()
     dialogVimee.suspend()
+    inputSource.setActive(enabled() && inputKind(props.context) !== undefined)
     syncCursor()
     form.focus()
   })
@@ -189,6 +198,16 @@ function VimHost(props: { context: Context }) {
   props.context.renderer.keyInput.prependListener("paste", onPaste)
   props.context.renderer.on("focused_editor", onFocus)
   createEffect(() => syncCursor())
+  createEffect(() => {
+    if (!enabled()) {
+      inputSource.setActive(false)
+      inputSource.reset()
+      return
+    }
+    inputSource.setActive(inputKind(props.context) !== undefined)
+    const mode = dialogFocused() ? dialogState.mode() : state.mode()
+    inputSource.sync(mode, readInsertContext())
+  })
   let route = props.context.ui.router.current()
   createEffect(() => {
     const next = props.context.ui.router.current()
@@ -205,6 +224,7 @@ function VimHost(props: { context: Context }) {
     vimee.cleanup()
     dialogVimee.cleanup()
     void clipboard.dispose()
+    void inputSource.dispose()
     restoreCursor()
   })
 
@@ -232,18 +252,63 @@ function VimHost(props: { context: Context }) {
       cursorInput = input
       originalCursorStyle = input.cursorStyle
     }
-    if (!force && !inputChanged && cursorMode === mode) return
-    if (applyVimCursorStyle(ctx as never, config.cursorStyles[mode])) {
-      cursorMode = mode
-      props.context.renderer.requestRender()
+    if (force || inputChanged || cursorMode !== mode) {
+      if (applyVimCursorStyle(ctx as never, config.cursorStyles[mode])) {
+        cursorMode = mode
+        props.context.renderer.requestRender()
+      }
     }
+    syncCursorColor()
   }
 
   function restoreCursor() {
     if (cursorInput && !cursorInput.isDestroyed && originalCursorStyle) cursorInput.cursorStyle = originalCursorStyle
     cursorInput = null
     cursorMode = ""
+    if (cursorColor !== undefined) {
+      resetCursorColor(props.context.renderer)
+      cursorColor = undefined
+    }
   }
+
+  function readInsertContext() {
+    const input = props.context.renderer.currentFocusedEditor
+    if (!input) return undefined
+    const text = input.plainText ?? ""
+    return { text, position: displayToChar(text, Math.max(0, input.cursorOffset ?? 0)) }
+  }
+
+  function syncCursorColor() {
+    const colors = config.inputSource.cursorColors
+    if (!config.inputSource.enabled || (!colors.english && !colors.other)) return
+
+    const renderer = props.context.renderer as unknown as {
+      setCursorColor?: (color: RGBA) => void
+      writeOut?: (text: string) => void
+    }
+    if (typeof renderer.setCursorColor !== "function") return
+
+    const source = inputSource.source()
+    const next = source === undefined || source === config.inputSource.normal ? colors.english : colors.other
+    if (next === cursorColor) return
+
+    try {
+      if (next !== undefined) renderer.setCursorColor(RGBA.fromHex(next))
+      else resetCursorColor(renderer)
+      cursorColor = next
+    } catch (error) {
+      log("cursor.color.error", { error: error instanceof Error ? error.message : String(error) })
+    }
+  }
+}
+
+function resetCursorColor(target: unknown) {
+  const renderer = target as { writeOut?: (text: string) => void }
+  if (typeof renderer.writeOut !== "function") return
+  try {
+    renderer.writeOut("\u001B]112\u0007")
+    renderer.writeOut("\u001B]12;default\u0007")
+  } catch {}
 }
 
 function createCompatContext(context: Context) {
