@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { VimInputSource } from "../../src/vim/config"
 import { DEFAULT_ENGLISH_PATTERN, DEFAULT_OTHER_PATTERN } from "../../src/vim/context"
-import type { InputSourceRunner } from "../../src/vim/input-source"
+import type { InputSourceDeps, InputSourceRunner } from "../../src/vim/input-source"
 import { createInputSourceController, splitCommand } from "../../src/vim/input-source"
 
 function testConfig(overrides: Partial<VimInputSource> = {}): VimInputSource {
@@ -43,6 +43,9 @@ function createFakeRunner(initial = "im.cn") {
     return {
         runner,
         calls,
+        setCurrent(value: string) {
+            current = value
+        },
         fail(error: Error) {
             failure = error
         },
@@ -59,10 +62,14 @@ function createFakeRunner(initial = "im.cn") {
     }
 }
 
+function createController(config: VimInputSource, deps: Partial<InputSourceDeps> = {}) {
+    return createInputSourceController(config, { confirmDelayMs: 0, ...deps })
+}
+
 describe("input source controller", () => {
     test("ignores the initial mode until a real transition happens", async () => {
         const fake = createFakeRunner()
-        const controller = createInputSourceController(testConfig(), { runner: fake.runner })
+        const controller = createController(testConfig(), { runner: fake.runner })
 
         controller.sync("insert", { text: "", position: 0 })
         await controller.settle()
@@ -72,7 +79,7 @@ describe("input source controller", () => {
 
     test("remembers the insert source and restores it", async () => {
         const fake = createFakeRunner("im.cn")
-        const controller = createInputSourceController(testConfig(), { runner: fake.runner })
+        const controller = createController(testConfig(), { runner: fake.runner })
 
         controller.sync("insert", { text: "", position: 0 })
         controller.sync("normal")
@@ -86,7 +93,7 @@ describe("input source controller", () => {
 
     test("context english keeps the normal source", async () => {
         const fake = createFakeRunner()
-        const controller = createInputSourceController(testConfig({ insert: "im.fixed" }), { runner: fake.runner })
+        const controller = createController(testConfig({ insert: "im.fixed" }), { runner: fake.runner })
 
         controller.sync("insert")
         controller.sync("normal")
@@ -107,7 +114,7 @@ describe("input source controller", () => {
 
     test("context other uses the fixed insert source", async () => {
         const fake = createFakeRunner()
-        const controller = createInputSourceController(testConfig({ insert: "im.fixed" }), { runner: fake.runner })
+        const controller = createController(testConfig({ insert: "im.fixed" }), { runner: fake.runner })
 
         controller.sync("insert")
         controller.sync("normal")
@@ -121,7 +128,7 @@ describe("input source controller", () => {
 
     test("context disabled falls back to the remembered source", async () => {
         const fake = createFakeRunner()
-        const controller = createInputSourceController(testConfig({ context: false }), { runner: fake.runner })
+        const controller = createController(testConfig({ context: false }), { runner: fake.runner })
 
         controller.sync("insert")
         controller.sync("normal")
@@ -135,7 +142,7 @@ describe("input source controller", () => {
 
     test("coalesces rapid transitions", async () => {
         const fake = createFakeRunner()
-        const controller = createInputSourceController(testConfig(), { runner: fake.runner })
+        const controller = createController(testConfig(), { runner: fake.runner })
 
         controller.sync("insert")
         fake.holdGet()
@@ -151,7 +158,7 @@ describe("input source controller", () => {
 
     test("reset returns to the normal source", async () => {
         const fake = createFakeRunner()
-        const controller = createInputSourceController(testConfig(), { runner: fake.runner })
+        const controller = createController(testConfig(), { runner: fake.runner })
 
         controller.sync("insert")
         controller.sync("normal")
@@ -165,11 +172,79 @@ describe("input source controller", () => {
         expect(fake.calls.at(-1)).toBe("set:im.us")
     })
 
+    test("retries once when the system reverts the switch", async () => {
+        const fake = createFakeRunner("im.cn")
+        const controller = createController(testConfig(), { runner: fake.runner, confirmDelayMs: 15 })
+
+        controller.sync("insert")
+        controller.sync("normal")
+        await controller.settle()
+        fake.calls.length = 0
+
+        controller.sync("insert", { text: "中文", position: 2 })
+        await controller.settle()
+        expect(fake.calls).toEqual(["set:im.cn"])
+
+        // Simulate macOS restoring the normal source right after the switch.
+        fake.setCurrent("im.us")
+        await Bun.sleep(40)
+        expect(fake.calls).toEqual(["set:im.cn", "get", "set:im.cn"])
+    })
+
+    test("does not retry when the switch holds", async () => {
+        const fake = createFakeRunner("im.cn")
+        const controller = createController(testConfig(), { runner: fake.runner, confirmDelayMs: 15 })
+
+        controller.sync("insert")
+        controller.sync("normal")
+        await controller.settle()
+        fake.calls.length = 0
+
+        controller.sync("insert", { text: "中文", position: 2 })
+        await controller.settle()
+        await Bun.sleep(40)
+        expect(fake.calls).toEqual(["set:im.cn", "get"])
+    })
+
+    test("does not retry after leaving insert", async () => {
+        const fake = createFakeRunner("im.cn")
+        const controller = createController(testConfig(), { runner: fake.runner, confirmDelayMs: 15 })
+
+        controller.sync("insert")
+        controller.sync("normal")
+        await controller.settle()
+        fake.calls.length = 0
+
+        controller.sync("insert", { text: "中文", position: 2 })
+        await controller.settle()
+        fake.setCurrent("im.us")
+        controller.sync("normal")
+        await controller.settle()
+        await Bun.sleep(40)
+        expect(fake.calls).toEqual(["set:im.cn", "get", "set:im.us"])
+    })
+
+    test("does not retry when another source was chosen", async () => {
+        const fake = createFakeRunner("im.cn")
+        const controller = createController(testConfig(), { runner: fake.runner, confirmDelayMs: 15 })
+
+        controller.sync("insert")
+        controller.sync("normal")
+        await controller.settle()
+        fake.calls.length = 0
+
+        controller.sync("insert", { text: "中文", position: 2 })
+        await controller.settle()
+        fake.setCurrent("im.other")
+        await Bun.sleep(40)
+        expect(fake.calls).toEqual(["set:im.cn", "get"])
+    })
+
     test("notifies once when the helper is missing", async () => {
         const fake = createFakeRunner()
         fake.fail(Object.assign(new Error("spawn macism ENOENT"), { code: "ENOENT" }))
         const notifications: string[] = []
-        const controller = createInputSourceController(testConfig(), {
+        const controller = createController(testConfig(), {
             runner: fake.runner,
             notify: (message) => notifications.push(message),
         })
@@ -185,7 +260,7 @@ describe("input source controller", () => {
 
     test("stays inert when disabled", async () => {
         const fake = createFakeRunner()
-        const controller = createInputSourceController(testConfig({ enabled: false }), { runner: fake.runner })
+        const controller = createController(testConfig({ enabled: false }), { runner: fake.runner })
 
         controller.sync("insert")
         controller.sync("normal")
