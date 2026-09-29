@@ -30,11 +30,14 @@ export type InputSourceDeps = {
     log?: VimLog
     runner?: InputSourceRunner
     notify?: (message: string) => void
+    /** Delay before verifying a CJK switch; 0 disables the check (tests). */
+    confirmDelayMs?: number
 }
 
 type Job = { kind: "normal"; force?: boolean } | { kind: "insert"; language: ContextLanguage | undefined }
 
 const MISSING_HELPER_MESSAGE = "Input source helper not found. Install macism: brew tap laishulu/homebrew && brew install macism"
+const CONFIRM_DELAY_MS = 180
 
 export function createInputSourceController(config: VimInputSource, deps: InputSourceDeps = {}): InputSourceController {
     const log = deps.log ?? (() => {})
@@ -52,7 +55,10 @@ export function createInputSourceController(config: VimInputSource, deps: InputS
     let running: Promise<void> | undefined
     let initial: Promise<void> | undefined
     let pollTimer: ReturnType<typeof setInterval> | undefined
+    let confirmTimer: ReturnType<typeof setTimeout> | undefined
+    let applyToken = 0
     let notified = false
+    const confirmDelayMs = deps.confirmDelayMs ?? CONFIRM_DELAY_MS
 
     if (config.enabled && !runner) notifyOnce(MISSING_HELPER_MESSAGE)
     if (config.enabled && runner) {
@@ -104,6 +110,7 @@ export function createInputSourceController(config: VimInputSource, deps: InputS
         if (!config.enabled || !runner) return
         lastMode = "normal"
         setActive(false)
+        cancelConfirm()
         enqueue({ kind: "normal", force: true })
     }
 
@@ -164,15 +171,19 @@ export function createInputSourceController(config: VimInputSource, deps: InputS
         return config.insert ?? lastOther ?? config.normal
     }
 
-    async function apply(target: string, force = false) {
+    async function apply(target: string, force = false, confirmable = true) {
         if (!runner) return
         if (!force && source() === target) return
+
+        const token = ++applyToken
+        cancelConfirm()
 
         try {
             await runner.set(target)
             setSource(target)
             if (target !== config.normal) lastOther = target
             log("input-source.set", { source: target })
+            if (confirmable && target !== config.normal && confirmDelayMs > 0) scheduleConfirm(target, token)
         } catch (error) {
             fail("set", error)
         }
@@ -197,6 +208,33 @@ export function createInputSourceController(config: VimInputSource, deps: InputS
 
         if (current !== source()) setSource(current)
         if (current !== config.normal) lastOther = current
+    }
+
+    function cancelConfirm() {
+        if (!confirmTimer) return
+        clearTimeout(confirmTimer)
+        confirmTimer = undefined
+    }
+
+    function scheduleConfirm(target: string, token: number) {
+        confirmTimer = setTimeout(() => {
+            confirmTimer = undefined
+            void confirmSwitch(target, token)
+        }, confirmDelayMs)
+    }
+
+    // macOS can restore the previous source right after a CJK switch (the same
+    // focus quirk macism's workaround works around). Verify once and retry if
+    // the switch was reverted to the normal source.
+    async function confirmSwitch(target: string, token: number) {
+        if (token !== applyToken || lastMode !== "insert") return
+
+        const current = await readCurrent()
+        if (token !== applyToken || lastMode !== "insert") return
+        if (!current || current === target || current !== config.normal) return
+
+        log("input-source.confirm", { result: "reverted", target })
+        await apply(target, true, false)
     }
 
     function fail(action: string, error: unknown) {
