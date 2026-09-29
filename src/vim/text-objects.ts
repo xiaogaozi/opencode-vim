@@ -9,6 +9,7 @@ import {
   type VimContext,
   type VimMode,
 } from "@vimee/core"
+import { wordTextObject, type WordDecoder } from "./word-motions"
 
 export function textObjectAlias(key: string, ctx: VimContext) {
   if (ctx.phase !== "text-object-pending") return undefined
@@ -26,8 +27,10 @@ export function resolvePromptTextObject(
   key: string,
   cursor: CursorPosition,
   buffer: TextBuffer,
+  decode: WordDecoder,
 ): MotionRange | null {
   if (key === "q") return quoteRange(modifier, cursor, buffer)
+  if (key === "w" || key === "W") return wordTextObject(modifier, cursor, key === "W", buffer, decode)
   if (key !== "p") return null
   return paragraphRange(modifier, cursor, buffer)
 }

@@ -68,6 +68,39 @@ describe("real textarea Vim editing", () => {
     expect(fixture.input.plainText).toBe("abcdef")
   })
 
+  test("CJK word motions stop at Chinese punctuation", async () => {
+    fixture = await createFixture("你好，世界。测试")
+    await fixture.keys("w")
+    expect(fixture.input.cursorOffset).toBe(4)
+    await fixture.keys("w")
+    expect(fixture.input.cursorOffset).toBe(6)
+    await fixture.keys("e")
+    expect(fixture.input.cursorOffset).toBe(8)
+    await fixture.keys("b")
+    expect(fixture.input.cursorOffset).toBe(6)
+  })
+
+  test("CJK operators act on the word, not the whole line", async () => {
+    fixture = await createFixture("你好，世界。测试")
+    await fixture.keys("dw")
+    expect(fixture.input.plainText).toBe("，世界。测试")
+    await fixture.keys("u")
+    expect(fixture.input.plainText).toBe("你好，世界。测试")
+    await fixture.keys("ciwX")
+    fixture.mockInput.pressEscape()
+    expect(fixture.input.plainText).toBe("X，世界。测试")
+    await fixture.keys("u")
+    expect(fixture.input.plainText).toBe("你好，世界。测试")
+  })
+
+  test("CJK text objects select the word under the cursor", async () => {
+    fixture = await createFixture("你好，世界。测试")
+    await fixture.keys("viw")
+    expect(fixture.input.getSelectedText()).toBe("你好")
+    await fixture.keys("d")
+    expect(fixture.input.plainText).toBe("，世界。测试")
+  })
+
   for (const key of ["p", "P", "2p", "2P"]) {
     test(`linewise ${key} fills an empty prompt without adding a blank line`, async () => {
       fixture = await createFixture()
