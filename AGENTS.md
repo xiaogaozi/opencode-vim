@@ -62,6 +62,9 @@ git push origin custom feature/<name>
 - `gh` already defaults to the fork for this clone (`gh repo set-default --view`).
 - Open feature PRs against `custom`: `gh pr create --base custom`. Without
   `--base`, gh targets `main`.
+- PR titles follow Conventional Commits with a leading emoji, e.g.
+  `✨ feat: add input source (IME) switching`. Keep them under 50 characters
+  and focused on the primary change; details belong in the body.
 - Merge with "Rebase and merge" or "Squash and merge"; never create merge
   commits on `custom`.
 - `.github/workflows/ci.yml` runs for PRs whose base is `main` or `custom`.
