@@ -171,6 +171,9 @@ automatically. Example configuration inside `options.vim`:
   macOS 26 workaround delay). Set `waitMs` to `0` to skip macism's
   `TemporaryWindow` workaround, which on some macOS 26 setups fails to switch
   CJK sources.
+- When macOS restores the previous source right after a CJK switch (the same
+  focus quirk the `TemporaryWindow` workaround targets), the plugin verifies
+  the switch once after a short delay and retries it.
 
 The plugin resets to the `normal` source and the default cursor color when Vim
 mode is disabled or the plugin unloads. Switching does not apply over SSH,
