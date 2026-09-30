@@ -55,10 +55,13 @@ const scenarios: Array<{ name: string; run: (fixture: Fixture) => Promise<void>;
     { name: "keymap-chains", run: keymapChains, setup: {
         stream: "chain response", vim: {
             defaultMode: "normal", keymapTimeout: 5000,
-            keymaps: { normal: {
-                "<C-g>n": ["insert", "text:chain submit", "agent:build", "submit"],
-                "<C-g>s": ["insert", "text:/chain-slash", "agent:build", "submit"],
-            } },
+            keymaps: {
+                normal: {
+                    "<C-g>n": ["insert", "text:chain submit", "agent:build", "submit"],
+                    "<C-g>s": ["insert", "text:/chain-slash", "agent:build", "submit"],
+                },
+                insert: { "<C-s>": "submit" },
+            },
         },
     } },
     { name: "message-reader", run: messageReader, setup: { messages: readerMessages } },

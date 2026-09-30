@@ -155,7 +155,7 @@ describe("vim keymap action chains", () => {
     })
 
     test("sends a pinned agent through the host session API", async () => {
-        const fixture = createFixture("normal", ["agent:build", "text:go", "submit"], "", () => {}, "Q", () => true, (agent) => {
+        const fixture = createFixture("normal", ["agent:build", "text:go", "submit"], "", () => {}, "Q", () => true, (agent: string | undefined) => {
             fixture.events.push(`send:${agent}`)
             return true
         })
@@ -247,7 +247,7 @@ describe("vim keymap configuration", () => {
     })
 })
 
-function createFixture(mode: VimMode, action: string | readonly string[] | undefined, text = "text", log: VimLog = () => {}, mappedKey = "Q", switchAgent?: (name: string) => boolean | Promise<boolean>, sendPrompt?: (agent: string) => boolean | Promise<boolean>) {
+function createFixture(mode: VimMode, action: string | readonly string[] | undefined, text = "text", log: VimLog = () => {}, mappedKey = "Q", switchAgent?: (name: string) => boolean | Promise<boolean>, sendPrompt?: (agent: string | undefined) => boolean | Promise<boolean>) {
     const input: {
         plainText: string
         cursorOffset: number

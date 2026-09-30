@@ -74,11 +74,17 @@ A chain may mix every action above except `switch-panel` and `passthrough`. The
 `text:` payload is literal: everything after the colon is inserted as-is, so
 spaces, punctuation, newlines and non-ASCII text need no key notation.
 
-`agent:` switches the session agent. When a chain pins an agent and then submits,
-the plugin sends the prompt through OpenCode's session API with that agent, like
-the host does for slash commands, because the host's own submit path replaces the
-agent with its client-side selection. A slash payload such as `/commit-and-push`
-runs the command that way when it exists, and is sent as a prompt otherwise.
+`agent:` switches the session agent before the next step, for example
+`["agent:build", "text:go", "submit"]`. A chain's `submit` sends the prompt
+through OpenCode's session API — the same path the host uses for slash commands —
+because the text is inserted programmatically and the host's own submit path
+replaces the pinned agent with its client-side selection. A slash payload runs its
+command when it exists and is sent as a prompt otherwise.
+
+A `submit` action that is not a chain step (for example `"<C-s>": "submit"`) uses
+the host's submit path, and closes OpenCode's prompt completion first: while a
+slash command or `@` mention is being completed, that completion owns submission
+and dispatching `prompt.submit` is ignored.
 
 The home screen has no session to switch yet, so a failing `agent:` step aborts
 the rest of the chain.
@@ -86,8 +92,6 @@ the rest of the chain.
 Chains run in the triggered mode. Enter another mode first (`["normal", "dw"]`)
 before a Vim key sequence step, because a Vim key sequence inside insert mode is
 rejected and aborts the chain. `submit` clears the prompt, so place it last.
-`submit` also closes OpenCode's prompt completion first, which otherwise owns
-submission while a slash command or `@` mention is being completed.
 
 ## Key notation
 

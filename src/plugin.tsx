@@ -332,7 +332,7 @@ function createCompatContext(context: Context, log: ReturnType<typeof createVimL
         context.keymap.dispatch(command)
         return
       }
-      submitPrompt(context)
+      submitPrompt(context, log)
     },
     blur() {
       context.renderer.currentFocusedEditor?.blur()
@@ -355,7 +355,7 @@ function createCompatContext(context: Context, log: ReturnType<typeof createVimL
     prompt: () => (inputKind(context) ? prompt : undefined),
     requestRender: () => context.renderer.requestRender(),
     switchAgent: (name: string) => switchAgent(context, name, log),
-    sendPrompt: (agent: string) => sendPrompt(context, agent, log),
+    sendPrompt: (agent: string | undefined) => sendPrompt(context, agent, log),
   }
 }
 
@@ -364,14 +364,14 @@ function createCompatContext(context: Context, log: ReturnType<typeof createVimL
  * `prompt.submit` is ignored in that mode, so close the completion and retry on
  * the next ticks until the prompt accepts the submit again.
  */
-function submitPrompt(context: Context, attempt = 0) {
+function submitPrompt(context: Context, log: ReturnType<typeof createVimLog>, attempt = 0) {
   const completing = context.keymap.commands().some((item) => item.id === "prompt.autocomplete.hide")
   if (!completing || attempt >= SUBMIT_RETRY_LIMIT) {
     context.keymap.dispatch("prompt.submit")
     return
   }
   if (attempt === 0) context.keymap.dispatch("prompt.autocomplete.hide")
-  setTimeout(() => submitPrompt(context, attempt + 1), 0)
+  setTimeout(() => submitPrompt(context, log, attempt + 1), 0)
 }
 
 const SUBMIT_RETRY_LIMIT = 10
@@ -394,15 +394,16 @@ async function switchAgent(context: Context, name: string, log: ReturnType<typeo
   }
 }
 
-/** Sends the prompt to the session with a pinned agent, like the host does for slash commands. */
-async function sendPrompt(context: Context, agent: string, log: ReturnType<typeof createVimLog>) {
+/** Sends a chain's prompt to the session, like the host does for slash commands. */
+async function sendPrompt(context: Context, agent: string | undefined, log: ReturnType<typeof createVimLog>) {
   const route = context.ui.router.current()
   if (route.type !== "session") return false
+  if (inputKind(context) !== "prompt") return false
   const input = context.renderer.currentFocusedEditor
   const text = input?.plainText ?? focusedInputValue(context)
   if (!text.trim()) return false
   try {
-    await context.client.session.switchAgent({ sessionID: route.sessionID, agent })
+    if (agent) await context.client.session.switchAgent({ sessionID: route.sessionID, agent })
     const slash = /^\/(\S+)\s*([\s\S]*)$/.exec(text)
     // Unknown slash text stays a prompt, matching the host's own submit path.
     if (slash && (await commandNames(context)).includes(slash[1])) {

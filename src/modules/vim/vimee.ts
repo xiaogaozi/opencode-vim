@@ -464,13 +464,19 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
         }
         if (step === "submit") {
             actions.push({ type: "submit" })
-            // A pinned agent cannot travel through the host's own submit path,
-            // which overwrites the session agent with its client-side selection.
-            if (chain.agent && ctx.sendPrompt) {
+            // Chain text is inserted programmatically, which races the host's own
+            // submit path and its client-side agent selection, so send through the
+            // session API when the host supports it.
+            if (ctx.sendPrompt) {
                 const sent = ctx.sendPrompt(chain.agent)
-                if (sent instanceof Promise) return sent
-                if (!sent) return "abort"
-                return map
+                if (sent instanceof Promise) {
+                    return sent.then((ok) => {
+                        if (ok) return true
+                        ctx.prompt()?.submit()
+                        return true
+                    })
+                }
+                if (sent) return map
             }
             ctx.prompt()?.submit()
             return map

@@ -7,7 +7,7 @@ import { keyNotation } from "../../src/modules/vim/keys"
 import { createVimState } from "../../src/modules/vim/state"
 import { createVimeeAdapter } from "../../src/modules/vim/vimee"
 
-export async function createFixture(text = "", options: VimOptions = {}, width = 80, adapterOptions: Parameters<typeof createVimeeAdapter>[3] & { switchAgent?: (name: string) => boolean | Promise<boolean>; sendPrompt?: (agent: string) => boolean | Promise<boolean> } = {}) {
+export async function createFixture(text = "", options: VimOptions = {}, width = 80, adapterOptions: Parameters<typeof createVimeeAdapter>[3] & { switchAgent?: (name: string) => boolean | Promise<boolean>; sendPrompt?: (agent: string | undefined) => boolean | Promise<boolean> } = {}) {
     const screen = await createTestRenderer({ width, height: 12, kittyKeyboard: true })
     const input = new TextareaRenderable(screen.renderer, {
         id: "prompt", width, height: 10, initialValue: text, wrapMode: "word",
@@ -35,7 +35,7 @@ export async function createFixture(text = "", options: VimOptions = {}, width =
         prompt: () => input.focused ? prompt : undefined,
         requestRender: () => screen.renderer.requestRender(),
         switchAgent: adapterOptions.switchAgent && ((name: string) => adapterOptions.switchAgent!(name)),
-        sendPrompt: adapterOptions.sendPrompt && ((agent: string) => adapterOptions.sendPrompt!(agent)),
+        sendPrompt: adapterOptions.sendPrompt && ((agent: string | undefined) => adapterOptions.sendPrompt!(agent)),
     }
     let handled: boolean | Promise<boolean> = false
     const onKey = (event: KeyEvent) => {

@@ -89,7 +89,7 @@ describe("real textarea Vim editing", () => {
     })
 
     test("sends a pinned agent through the host session API", async () => {
-        const sends: string[] = []
+        const sends: Array<string | undefined> = []
         fixture = await createFixture("", { keymaps: { normal: { Q: ["agent:build", "text:go", "submit"] } } }, 80, {
             switchAgent: () => true,
             sendPrompt: (agent) => { sends.push(agent); return true },
