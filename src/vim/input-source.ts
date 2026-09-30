@@ -20,6 +20,8 @@ export type InputSourceRunner = {
 export type InputSourceController = {
     source: Accessor<string | undefined>
     sync: (mode: VimMode, context?: InsertContext) => void
+    /** Switch directly to a language role, used by the inline English region. */
+    setSource: (role: "normal" | "other") => void
     setActive: (active: boolean) => void
     reset: () => void
     settle: () => Promise<void>
@@ -47,7 +49,7 @@ export function createInputSourceController(config: VimInputSource, deps: InputS
         aggressiveLine: config.contextAggressiveLine,
     }
     const runner = config.enabled ? deps.runner ?? createRunner(config) : undefined
-    const [source, setSource] = createSignal<string | undefined>(undefined)
+    const [source, setCurrent] = createSignal<string | undefined>(undefined)
 
     let lastMode: VimMode | undefined
     let lastOther: string | undefined
@@ -71,7 +73,7 @@ export function createInputSourceController(config: VimInputSource, deps: InputS
             })
     }
 
-    return { source, sync, setActive, reset, settle, dispose }
+    return { source, sync, setSource, setActive, reset, settle, dispose }
 
     function sync(mode: VimMode, context?: InsertContext) {
         if (!config.enabled || !runner) return
@@ -92,10 +94,15 @@ export function createInputSourceController(config: VimInputSource, deps: InputS
         }
     }
 
+    function setSource(role: "normal" | "other") {
+        if (!config.enabled || !runner) return
+        if (role === "normal") enqueue({ kind: "normal" })
+        else enqueue({ kind: "insert", language: "other" })
+    }
+
     function setActive(active: boolean) {
         if (!config.enabled || !runner || config.pollInterval <= 0) return
         if (active === (pollTimer !== undefined)) return
-
         if (active) {
             pollTimer = setInterval(() => {
                 void poll()
@@ -180,7 +187,7 @@ export function createInputSourceController(config: VimInputSource, deps: InputS
 
         try {
             await runner.set(target)
-            setSource(target)
+            setCurrent(target)
             if (target !== config.normal) lastOther = target
             log("input-source.set", { source: target })
             if (confirmable && target !== config.normal && confirmDelayMs > 0) scheduleConfirm(target, token)
@@ -206,7 +213,7 @@ export function createInputSourceController(config: VimInputSource, deps: InputS
         const current = await readCurrent()
         if (!current) return
 
-        if (current !== source()) setSource(current)
+        if (current !== source()) setCurrent(current)
         if (current !== config.normal) lastOther = current
     }
 
