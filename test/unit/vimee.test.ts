@@ -3,6 +3,7 @@ import type { KeyEvent } from "@opentui/core"
 import type { PromptContext } from "../../src/modules/vim/actions"
 import { createVimConfig } from "../../src/modules/vim/config"
 import type { VimLog } from "../../src/modules/vim/log"
+import { displayToChar, displayWidth } from "../../src/modules/vim/map"
 import { createVimState, type VimMode } from "../../src/modules/vim/state"
 import { createVimeeAdapter } from "../../src/modules/vim/vimee"
 
@@ -108,20 +109,172 @@ describe("vim prompt history", () => {
     })
 })
 
-function createFixture(mode: VimMode, action: string | undefined, text = "text", log: VimLog = () => {}, mappedKey = "Q") {
-    const input = {
+describe("vim keymap action chains", () => {
+    test("runs mode, text, and submit steps in order", () => {
+        const fixture = createFixture("normal", ["insert", "text:你好 world", "submit"], "")
+
+        expect(fixture.handle()).toBe(true)
+        expect(fixture.input.plainText).toBe("你好 world")
+        expect(fixture.state.mode()).toBe("insert")
+        expect(fixture.events).toEqual(["submit"])
+    })
+
+    test("inserts literal text without leaving normal mode", () => {
+        const fixture = createFixture("normal", ["text:继续"], "")
+
+        expect(fixture.handle()).toBe(true)
+        expect(fixture.input.plainText).toBe("继续")
+        expect(fixture.state.mode()).toBe("normal")
+        expect(fixture.submissions).toHaveLength(0)
+    })
+
+    test("falls back to replacing the prompt when the editor has no insertText", () => {
+        const fixture = createFixture("normal", ["text:继续"], "prefix ")
+        fixture.input.cursorOffset = displayWidth("prefix ")
+        delete fixture.input.insertText
+
+        expect(fixture.handle()).toBe(true)
+        expect(fixture.input.plainText).toBe("prefix 继续")
+    })
+
+    test("runs vim key sequences inside a chain", () => {
+        const fixture = createFixture("normal", ["text:hello world", "0", "dw"], "")
+
+        expect(fixture.handle()).toBe(true)
+        expect(fixture.input.plainText).toBe("world")
+    })
+
+    test("switches the agent before submitting", async () => {
+        const fixture = createFixture("normal", ["agent:build", "text:go", "submit"], "", () => {}, "Q", () => true)
+
+        const result = fixture.handle()
+        if (result instanceof Promise) await result
+
+        expect(fixture.events).toEqual(["agent:build", "submit"])
+        expect(fixture.input.plainText).toBe("go")
+    })
+
+    test("sends a pinned agent through the host session API", async () => {
+        const fixture = createFixture("normal", ["agent:build", "text:go", "submit"], "", () => {}, "Q", () => true, (agent) => {
+            fixture.events.push(`send:${agent}`)
+            return true
+        })
+
+        const result = fixture.handle()
+        if (result instanceof Promise) await result
+
+        expect(fixture.events).toEqual(["agent:build", "send:build"])
+        expect(fixture.submissions).toHaveLength(0)
+    })
+
+    test("aborts a synchronous chain when the agent switch fails", async () => {
+        const fixture = createFixture("normal", ["agent:build", "submit"], "", () => {}, "Q", () => false)
+
+        const result = fixture.handle()
+        if (result instanceof Promise) await result
+
+        expect(fixture.agents).toEqual(["build"])
+        expect(fixture.submissions).toHaveLength(0)
+        expect(fixture.events).toEqual(["agent:build"])
+    })
+
+    test("aborts an asynchronous chain when the agent switch fails", async () => {
+        const fixture = createFixture("normal", ["agent:build", "text:go", "submit"], "", () => {}, "Q", async () => false)
+
+        const result = fixture.handle()
+        expect(result).toBeInstanceOf(Promise)
+        if (result instanceof Promise) await result
+
+        expect(fixture.input.plainText).toBe("")
+        expect(fixture.submissions).toHaveLength(0)
+    })
+
+    test("aborts when the host has no agent switching", () => {
+        const fixture = createFixture("normal", ["agent:build", "text:go", "submit"])
+
+        expect(fixture.handle()).toBe(true)
+        expect(fixture.input.plainText).toBe("text")
+        expect(fixture.submissions).toHaveLength(0)
+    })
+
+    test("runs chains from insert mode", () => {
+        const fixture = createFixture("insert", ["text:片段", "submit"], "")
+
+        expect(fixture.handle()).toBe(true)
+        expect(fixture.input.plainText).toBe("片段")
+        expect(fixture.submissions).toHaveLength(1)
+    })
+
+    test("matches multi-key triggers", () => {
+        const fixture = createFixture("normal", ["insert", "text:ok", "submit"], "", () => {}, "<C-g>n")
+
+        expect(fixture.handle("g", true)).toBe(true)
+        expect(fixture.handle("n")).toBe(true)
+        expect(fixture.input.plainText).toBe("ok")
+        expect(fixture.submissions).toHaveLength(1)
+    })
+
+    test("rejects an invalid chain step", () => {
+        const logs: Array<[string, unknown]> = []
+        const fixture = createFixture("normal", ["insert", "<Bogus>"], "", (event, data) => logs.push([event, data]))
+
+        expect(logs.some(([event]) => event === "vimee.keymap.invalid")).toBe(true)
+        expect(fixture.handle()).toBe(true)
+        expect(fixture.input.plainText).toBe("")
+    })
+
+    test("keeps single-step actions working", () => {
+        const fixture = createFixture("normal", "insert")
+
+        expect(fixture.handle()).toBe(true)
+        expect(fixture.state.mode()).toBe("insert")
+    })
+})
+
+describe("vim keymap configuration", () => {
+    test("keeps action chains", () => {
+        const config = createVimConfig({ keymaps: { normal: { Q: ["insert", "text:hi", "submit"] } } })
+
+        expect(config.keymaps.normal?.Q).toEqual(["insert", "text:hi", "submit"])
+    })
+
+    test("drops empty steps and malformed actions", () => {
+        const config = createVimConfig({ keymaps: { normal: { Q: ["insert", "", 5], W: [], X: 5 } } })
+
+        expect(config.keymaps.normal?.Q).toEqual(["insert"])
+        expect(config.keymaps.normal?.W).toBeUndefined()
+        expect(config.keymaps.normal?.X).toBeUndefined()
+    })
+})
+
+function createFixture(mode: VimMode, action: string | readonly string[] | undefined, text = "text", log: VimLog = () => {}, mappedKey = "Q", switchAgent?: (name: string) => boolean | Promise<boolean>, sendPrompt?: (agent: string) => boolean | Promise<boolean>) {
+    const input: {
+        plainText: string
+        cursorOffset: number
+        visualCursor: { visualRow: number; visualCol: number; offset: number }
+        moveCursorLeft: () => boolean
+        insertText?: (value: string) => void
+    } = {
         plainText: text,
         cursorOffset: 0,
         visualCursor: { visualRow: 0, visualCol: 0, offset: 0 },
         moveCursorLeft: () => false,
+        insertText(value: string) {
+            const offset = displayToChar(input.plainText, input.cursorOffset)
+            input.plainText = input.plainText.slice(0, offset) + value + input.plainText.slice(offset)
+            input.cursorOffset = displayWidth(input.plainText.slice(0, offset + value.length))
+        },
     }
     const commands: string[] = []
     const submissions: true[] = []
+    const agents: string[] = []
+    const events: string[] = []
     const prompt = {
-        current: { input: text, mode: "normal", parts: [] },
-        set() {},
+        get current() { return { input: input.plainText, mode: "normal", parts: [] } },
+        set(value: { input: string }) { input.plainText = value.input },
         submit() {
             submissions.push(true)
+            events.push("submit")
         },
         blur() {},
     }
@@ -129,7 +282,12 @@ function createFixture(mode: VimMode, action: string | undefined, text = "text",
         input,
         commands,
         submissions,
-        handle: (key = mappedKey) => adapter.handle({ name: key } as KeyEvent, key, ctx),
+        agents,
+        events,
+        state: createVimState(mode),
+        handle(key = mappedKey, ctrl = false) {
+            return adapter.handle({ name: key, ctrl } as KeyEvent, ctrl ? `<C-${key}>` : key, ctx)
+        },
     }
     const ctx = {
         api: {
@@ -137,17 +295,24 @@ function createFixture(mode: VimMode, action: string | undefined, text = "text",
             keymap: {
                 dispatchCommand(command: string) {
                     commands.push(command)
+                    events.push(`command:${command}`)
                     return { ok: true as const }
                 },
             },
         },
         prompt: () => prompt,
         requestRender() {},
+        switchAgent: switchAgent && ((name: string) => {
+            agents.push(name)
+            events.push(`agent:${name}`)
+            return switchAgent(name)
+        }),
+        sendPrompt,
     } as unknown as PromptContext
     const config = createVimConfig({
         defaultMode: mode,
         keymaps: action ? { [mode]: { [mappedKey]: action } } : undefined,
     })
-    const adapter = createVimeeAdapter(createVimState(mode), config, log)
+    const adapter = createVimeeAdapter(fixture.state, config, log)
     return fixture
 }

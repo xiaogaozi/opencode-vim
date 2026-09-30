@@ -22,6 +22,10 @@ export type PromptContext = {
     }
     prompt: () => PromptRef | undefined
     requestRender: () => void
+    /** Switches the host agent; resolves false when no session can switch. */
+    switchAgent?: (name: string) => boolean | Promise<boolean>
+    /** Sends the prompt text to the session with that agent, bypassing the host's own agent selection. */
+    sendPrompt?: (agent: string) => boolean | Promise<boolean>
 }
 
 export type EditBufferLike = {
