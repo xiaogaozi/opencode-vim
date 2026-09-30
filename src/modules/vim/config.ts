@@ -1,5 +1,7 @@
 import { parseKeySequence } from "@vimee/core"
 import { DEFAULT_ENGLISH_PATTERN, DEFAULT_OTHER_PATTERN } from "./context"
+import { DEFAULT_INLINE, DEFAULT_INLINE_TIMEOUT_MS } from "./inline"
+import type { VimInline } from "./inline"
 import type { VimMode } from "./state"
 
 export type VimCursorStyle = {
@@ -37,6 +39,7 @@ export type VimConfig = {
     pendingDisplayDelay: number
     cursorStyles: Record<VimMode, VimCursorStyle>
     inputSource: VimInputSource
+    inline: VimInline
     debug: boolean
     debugPath?: string
     keymaps: VimKeymaps
@@ -50,6 +53,7 @@ export type VimOptions = {
     pendingDisplayDelay?: number
     cursorStyles?: Partial<Record<VimMode, VimCursorStyle>>
     inputSource?: VimInputSource
+    inline?: VimInline
     debug?: boolean
     debugPath?: string
     keymaps?: VimKeymaps
@@ -99,6 +103,7 @@ export function createVimConfig(options: unknown): VimConfig {
             "visual-line": { ...DEFAULT_CURSOR_STYLES["visual-line"], ...input.cursorStyles?.["visual-line"] },
         },
         inputSource: input.inputSource ?? DEFAULT_INPUT_SOURCE,
+        inline: input.inline ?? DEFAULT_INLINE,
         debug: input.debug ?? process.env.VIM_PROMPT_DEBUG === "1",
         debugPath: input.debugPath,
         keymaps: input.keymaps ?? {},
@@ -119,6 +124,7 @@ function readOptions(options: unknown): VimOptions {
         pendingDisplayDelay: typeof source.pendingDisplayDelay === "number" ? source.pendingDisplayDelay : undefined,
         cursorStyles: readCursorStyles(source.cursorStyles),
         inputSource: readInputSource(source.inputSource),
+        inline: readInline(source.inline),
         debug: typeof source.debug === "boolean" ? source.debug : undefined,
         debugPath: typeof source.debugPath === "string" ? source.debugPath : undefined,
         keymaps: readKeymaps(source.keymaps),
@@ -206,6 +212,16 @@ function readCursorColors(input: unknown): VimInputSourceCursorColors {
     return {
         english: readColor(source.english),
         other: readColor(source.other),
+    }
+}
+
+function readInline(input: unknown): VimInline | undefined {
+    if (!input || typeof input !== "object") return undefined
+    const source = input as Record<string, unknown>
+    return {
+        enabled: source.enabled === true,
+        timeoutMs: readNonNegative(source.timeoutMs) ?? DEFAULT_INLINE_TIMEOUT_MS,
+        enterCloses: typeof source.enterCloses === "boolean" ? source.enterCloses : true,
     }
 }
 
