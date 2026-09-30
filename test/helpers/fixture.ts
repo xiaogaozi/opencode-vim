@@ -11,7 +11,10 @@ export async function createFixture(
   text = "",
   options: VimOptions = {},
   width = 80,
-  adapterOptions: Parameters<typeof createVimeeAdapter>[3] = {},
+  adapterOptions: Parameters<typeof createVimeeAdapter>[3] & {
+    switchAgent?: (name: string) => boolean | Promise<boolean>
+    sendPrompt?: (agent: string | undefined) => boolean | Promise<boolean>
+  } = {},
 ) {
   const screen = await createTestRenderer({ width, height: 12, kittyKeyboard: true })
   const input = new TextareaRenderable(screen.renderer, {
@@ -49,6 +52,8 @@ export async function createFixture(
       return { ok: true }
     },
     requestRender: () => screen.renderer.requestRender(),
+    switchAgent: adapterOptions.switchAgent && ((name: string) => adapterOptions.switchAgent!(name)),
+    sendPrompt: adapterOptions.sendPrompt && ((agent: string | undefined) => adapterOptions.sendPrompt!(agent)),
   }
   let handled: boolean | Promise<boolean> = false
   const onKey = (event: KeyEvent) => {

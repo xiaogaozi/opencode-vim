@@ -33,6 +33,7 @@ configuration fallback stays in unit tests.
 | Behavior | Local coverage | Real OpenCode coverage |
 | --- | --- | --- |
 | Prompt focus, mode/status/theme, mappings, native key passthrough, cleanup | | `prompt-input`, `runtime-*`, `tab-switching`, `agent-switching*` |
+| Keymap action chains, `text:`/`agent:` steps, aborts, chain clipboard reads | `unit/vimee.test.ts`, `integration/editor.test.ts`, `integration/clipboard.test.ts` | `keymap-chains` |
 | Clipboard Unicode/CRLF/counts, undo/redo, registers, async ordering, fallback, adapter cancellation | `integration/clipboard.test.ts` | `prompt-clipboard`, `session-copy`, `clipboard-cancel-*` (late response and queued keys across focus/route/toggle/unload) |
 | Dialog query changes and command selection | | `dialog-focus`, `dialog-focus-normal`, `dialog-mappings`, `dialog-multikey-mappings`, `dialog-scope`, `prompt-dialog` (mode inheritance, filtered results after edit/undo/redo, insert/normal mappings, undo isolation, mapping-prefix priority, native navigation, pending motions and unrelated extension input) |
 | Question form navigation, custom answers, insert mappings, submission/cancellation and prompt restoration | | `question-forms`, `question-forms-kj`, `question-forms-zz` |

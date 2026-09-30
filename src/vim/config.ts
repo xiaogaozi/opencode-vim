@@ -59,7 +59,8 @@ export type VimKeymaps = Partial<Record<VimMode, Record<string, VimMappedAction>
   session?: Record<string, SessionAction>
   panes?: Record<string, VimMappedAction>
 }
-export type VimMappedAction = string
+/** A single action, or a chain of steps run in order by one mapping. */
+export type VimMappedAction = string | readonly string[]
 
 const DEFAULT_CURSOR_STYLES: Record<VimMode, VimCursorStyle> = {
   insert: { style: "line", blinking: true },
@@ -141,7 +142,8 @@ function readKeymaps(input: unknown): VimKeymaps | undefined {
     if (!raw || typeof raw !== "object") continue
     keymaps[mode] = {}
     for (const [key, action] of Object.entries(raw as Record<string, unknown>)) {
-      if (isMappedAction(action)) keymaps[mode][key] = action
+      const mapped = readMappedAction(action)
+      if (mapped) keymaps[mode][key] = mapped
     }
   }
   if (source.session && typeof source.session === "object") {
@@ -242,8 +244,11 @@ function isMode(value: unknown): value is VimMode {
   return value === "insert" || value === "normal" || value === "visual" || value === "visual-line"
 }
 
-function isMappedAction(value: unknown): value is VimMappedAction {
-  return typeof value === "string" && value.length > 0
+function readMappedAction(value: unknown): VimMappedAction | undefined {
+  if (typeof value === "string") return value.length > 0 ? value : undefined
+  if (!Array.isArray(value)) return undefined
+  const steps = value.filter((step): step is string => typeof step === "string" && step.length > 0)
+  return steps.length > 0 ? steps : undefined
 }
 
 function readNumber(value: unknown) {

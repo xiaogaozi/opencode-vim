@@ -21,7 +21,7 @@ export function createPaneKeymaps(config: VimConfig, log: VimLog) {
           commands.delete(key)
           continue
         }
-        const command = mappedCommand(action)
+        const command = typeof action === "string" ? mappedCommand(action) : undefined
         if (!command) throw new Error("Pane mappings support only command:<id> or passthrough")
         commands.set(key, command)
       } catch (error) {

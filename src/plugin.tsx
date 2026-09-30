@@ -48,7 +48,7 @@ function VimHost(props: { context: Context }) {
   const [saved, setSaved] = props.context.storage.store("state", { initial: { enabled: true } })
   const enabled = () => saved.enabled
   const form = createFormMode(props.context, config, log, enabled)
-  const editorContext = createEditorContext(props.context)
+  const editorContext = createEditorContext(props.context, log)
   let cursorMode = ""
   let cursorColor: string | undefined
   let cursorInput: typeof props.context.renderer.currentFocusedEditor = null
@@ -348,7 +348,7 @@ function resetCursorColor(target: unknown) {
   } catch {}
 }
 
-function createEditorContext(context: Context): EditorContext {
+function createEditorContext(context: Context, log: ReturnType<typeof createVimLog>): EditorContext {
   return {
     input: () => (inputKind(context) ? (context.renderer.currentFocusedEditor ?? undefined) : undefined),
     get widthMethod() {
@@ -372,9 +372,9 @@ function createEditorContext(context: Context): EditorContext {
           ? "dialog.select.submit"
           : "dialog.prompt.submit"
         context.keymap.dispatch(command)
-      } else {
-        context.keymap.dispatch("prompt.submit")
+        return
       }
+      submitPrompt(context, log)
     },
     blur() {
       context.renderer.currentFocusedEditor?.blur()
@@ -385,7 +385,84 @@ function createEditorContext(context: Context): EditorContext {
       return { ok }
     },
     requestRender: () => context.renderer.requestRender(),
+    switchAgent: (name: string) => switchAgent(context, name),
+    sendPrompt: (agent: string | undefined) => sendPrompt(context, agent, log),
   }
+}
+
+/**
+ * The prompt completion owns submission while it is showing: dispatching
+ * `prompt.submit` is ignored in that mode, so close the completion and retry on
+ * the next ticks until the prompt accepts the submit again.
+ */
+function submitPrompt(context: Context, log: ReturnType<typeof createVimLog>, attempt = 0) {
+  const completing = context.keymap.commands().some((item) => item.id === "prompt.autocomplete.hide")
+  if (!completing || attempt >= SUBMIT_RETRY_LIMIT) {
+    context.keymap.dispatch("prompt.submit")
+    return
+  }
+  if (attempt === 0) context.keymap.dispatch("prompt.autocomplete.hide")
+  setTimeout(() => submitPrompt(context, log, attempt + 1), 0)
+}
+
+const SUBMIT_RETRY_LIMIT = 10
+
+/**
+ * Keymap `agent:` steps switch the session agent; the home screen has none yet.
+ *
+ * Prompts are submitted with the host's own client-side agent selection, so this
+ * only records the switch; a chain that pinned an agent sends through the
+ * session API instead (see `sendPrompt`).
+ */
+async function switchAgent(context: Context, name: string) {
+  const route = context.ui.router.current()
+  if (route.type !== "session") return false
+  try {
+    await context.client.session.switchAgent({ sessionID: route.sessionID, agent: name })
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** Sends a chain's prompt to the session, like the host does for slash commands. */
+async function sendPrompt(context: Context, agent: string | undefined, log: ReturnType<typeof createVimLog>) {
+  const route = context.ui.router.current()
+  if (route.type !== "session") return false
+  if (inputKind(context) !== "prompt") return false
+  const input = context.renderer.currentFocusedEditor
+  const text = input?.plainText ?? ""
+  if (!text.trim()) return false
+  try {
+    if (agent) await context.client.session.switchAgent({ sessionID: route.sessionID, agent })
+    const slash = /^\/(\S+)\s*([\s\S]*)$/.exec(text)
+    // Unknown slash text stays a prompt, matching the host's own submit path.
+    if (slash && (await commandNames(context)).includes(slash[1])) {
+      await context.client.session.command({ sessionID: route.sessionID, name: slash[1], text: slash[2] })
+    } else {
+      await context.client.session.prompt({ sessionID: route.sessionID, text })
+    }
+    clearPrompt(context, input)
+    return true
+  } catch (error) {
+    log("vim.prompt.send.error", { error: error instanceof Error ? error.message : String(error), agent })
+    return false
+  }
+}
+
+async function commandNames(context: Context) {
+  try {
+    return ((await context.client.command.list()).data ?? []).map((item) => item.name)
+  } catch {
+    return []
+  }
+}
+
+function clearPrompt(context: Context, input: Context["renderer"]["currentFocusedEditor"]) {
+  context.keymap.dispatch("prompt.clear")
+  if (!input || input.isDestroyed || input.plainText === "") return
+  if (input instanceof InputRenderable) input.value = ""
+  else editInput(input, "", context.renderer.widthMethod)
 }
 
 function inputKind(context: Context): "prompt" | "dialog" | undefined {

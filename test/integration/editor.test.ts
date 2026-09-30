@@ -401,6 +401,66 @@ describe("real textarea Vim editing", () => {
     expect(fixture.state.mode()).toBe("normal")
   })
 
+  test("runs an action chain with an agent switch and submit", async () => {
+    const events: string[] = []
+    fixture = await createFixture("", { keymaps: { normal: { Q: ["insert", "text:你好 world", "agent:build", "submit"] } } }, 80, {
+      switchAgent: (name) => {
+        events.push(`agent:${name}`)
+        return true
+      },
+    })
+
+    await fixture.keys("Q")
+    expect(fixture.input.plainText).toBe("你好 world")
+    expect(fixture.submissions).toBe(1)
+    expect(events).toEqual(["agent:build"])
+    expect(fixture.state.mode()).toBe("insert")
+  })
+
+  test("aborts an action chain when the agent switch fails", async () => {
+    fixture = await createFixture("", { keymaps: { normal: { Q: ["agent:build", "text:go", "submit"] } } }, 80, {
+      switchAgent: async () => false,
+    })
+
+    await fixture.keys("Q")
+    expect(fixture.input.plainText).toBe("")
+    expect(fixture.submissions).toBe(0)
+  })
+
+  test("sends a pinned agent through the host session API", async () => {
+    const sends: Array<string | undefined> = []
+    fixture = await createFixture("", { keymaps: { normal: { Q: ["agent:build", "text:go", "submit"] } } }, 80, {
+      switchAgent: () => true,
+      sendPrompt: (agent) => {
+        sends.push(agent)
+        return true
+      },
+    })
+
+    await fixture.keys("Q")
+    expect(sends).toEqual(["build"])
+    expect(fixture.submissions).toBe(0)
+  })
+
+  test("cancels an action chain when the editor changes during the agent switch", async () => {
+    let settle = (_: boolean) => {}
+    const pending = new Promise<boolean>((resolve) => {
+      settle = resolve
+    })
+    fixture = await createFixture("", { keymaps: { normal: { Q: ["agent:build", "text:go", "submit"] } } }, 80, {
+      switchAgent: () => pending,
+    })
+
+    const pressed = fixture.keys("Q")
+    await new Promise((resolve) => setImmediate(resolve))
+    fixture.adapter.suspend()
+    settle(true)
+    await pressed
+
+    expect(fixture.input.plainText).toBe("")
+    expect(fixture.submissions).toBe(0)
+  })
+
   test("A can start a multi-key mapping", async () => {
     fixture = await createFixture("abc", { keymaps: { normal: { AA: "x" } } })
     await fixture.keys("AA")

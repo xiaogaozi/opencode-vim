@@ -31,7 +31,7 @@ All options below belong inside `options.vim`.
 | `sessionKey` | `"s"` | Single key to enter and leave session mode |
 | `diffView` | `"after"` | Starting edit/patch view: `"after"`, `"before"`, or `"diff"`; added/deleted files use the available side |
 | `keymapTimeout` | `500` | Milliseconds to wait for the rest of a custom mapping |
-| `keymaps` | `{}` | Custom mappings, grouped by mode |
+| `keymaps` | `{}` | Custom mappings, grouped by mode; values may be action chains |
 | `cursorStyles` | See below | Cursor appearance for each editing mode |
 | `inputSource` | disabled | Switch the OS input method per editing mode; see below |
 | `debug` | `false` | Enable debug logging |
@@ -53,7 +53,8 @@ the prompt and search dialogs. Insert-mode mappings also apply while typing a
 question answer. Use `keymaps.session` for transcript browsing and its
 message/tool modals, and `keymaps.panes` for shared prompt/terminal controls.
 
-See [Custom Keymaps](./keymap-actions.md) for actions, key notation, and examples.
+See [Custom Keymaps](./keymap-actions.md) for actions, action chains, key
+notation, and examples.
 See [Keybindings and Modes](./vim-behavior.md) for the default behavior.
 
 ### Pane controls
