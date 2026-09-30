@@ -6,12 +6,16 @@ import {
   type ValidKeySequence,
   type VimAction,
 } from "@vimee/core"
-import type { VimConfig } from "./config"
+import type { VimConfig, VimMappedAction } from "./config"
 import { keyToken } from "./keys"
 import type { VimLog } from "./log"
 
-type HostKeybindAction = "normal" | "submit" | "command"
-export type HostKeybindDefinition = KeybindDefinition & { hostAction?: HostKeybindAction; command?: string }
+type HostKeybindAction = "normal" | "submit" | "command" | "chain"
+export type HostKeybindDefinition = KeybindDefinition & {
+  hostAction?: HostKeybindAction
+  command?: string
+  steps?: readonly string[]
+}
 
 export function hasNormalKeyPrefix(config: VimConfig, key: string) {
   for (const sequence of Object.keys(config.keymaps.normal ?? {})) {
@@ -65,7 +69,8 @@ export function mappedCommand(action: string): string | undefined {
   }
 }
 
-function keybindAction(action: string): HostKeybindDefinition {
+function keybindAction(action: VimMappedAction): HostKeybindDefinition {
+  if (typeof action !== "string") return chainAction(action)
   const command = mappedCommand(action)
   if (command) {
     return {
@@ -82,6 +87,45 @@ function keybindAction(action: string): HostKeybindDefinition {
     case "submit":
       return { execute: () => [{ type: "submit" } as unknown as VimAction], hostAction: "submit" }
     default:
+      if (action.startsWith("agent:") || action.startsWith("text:")) return chainAction([action])
       return { keys: action }
+  }
+}
+
+function chainAction(steps: readonly string[]): HostKeybindDefinition {
+  if (steps.length === 0) throw new Error("Action chain must not be empty")
+  for (const step of steps) validateChainStep(step)
+  return { execute: () => [], hostAction: "chain", steps }
+}
+
+export function chainSteps(definition: KeybindDefinition): readonly string[] | undefined {
+  return (definition as HostKeybindDefinition).steps
+}
+
+function validateChainStep(step: string) {
+  if (step.startsWith("command:")) {
+    if (!step.slice("command:".length).trim()) throw new Error("Command name is required")
+    return
+  }
+  if (step.startsWith("agent:")) {
+    if (!step.slice("agent:".length).trim()) throw new Error("Agent name is required")
+    return
+  }
+  const sequence = chainSequence(step)
+  if (sequence) parseKeySequence(sequence)
+}
+
+/** A chain step that is a Vim key sequence, or undefined for host actions. */
+export function chainSequence(step: string): string | undefined {
+  if (step === "normal" || step === "insert" || step === "submit") return undefined
+  if (step.startsWith("command:") || step.startsWith("agent:") || step.startsWith("text:")) return undefined
+  return step
+}
+
+export function sequenceNeedsClipboard(sequence: string) {
+  try {
+    return parseKeySequence(sequence).some((token) => ["p", "P", ".", "@"].includes(token))
+  } catch {
+    return false
   }
 }
