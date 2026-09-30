@@ -1,6 +1,7 @@
 # Custom Keymaps
 
-Each entry maps a key sequence to an action in one Vim mode. Put `keymaps` inside
+Each entry maps a key sequence to an action in one Vim mode, or to a list of
+actions run in order. Put `keymaps` inside
 `options.vim` in your plugin's `cli.json` entry; see [Configuration](./configuration.md).
 
 ```json
@@ -38,12 +39,15 @@ native confirm/submit action.
 | `insert` | Enter insert mode |
 | `submit` | Submit the prompt or confirm the search dialog |
 | `command:<id>` | Dispatch an active OpenCode command |
+| `agent:<id>` | Switch the session agent, for example `agent:build` |
+| `text:<text>` | Insert that literal text at the cursor |
 | Vim key sequence, such as `y$` | Run those Vim keys |
 | `switch-panel` | Session only: switch between available panels |
 | `passthrough` | Session only: leave a single key to OpenCode without consuming it |
 
-Insert-mode mappings support only `normal`, `submit`, `command:<id>`, or Escape
-(`"<Esc>"` / `"<C-[>"`). Other editing modes support all editing actions above.
+Insert-mode mappings support only `normal`, `submit`, `command:<id>`, `agent:<id>`,
+`text:<text>`, or Escape (`"<Esc>"` / `"<C-[>"`). Other editing modes support all
+editing actions above.
 
 Mapping sequences are literal: mapping `j` to `j` uses an actual line, while
 mapping it to `gj` uses a wrapped row.
@@ -51,6 +55,43 @@ mapping it to `gj` uses a wrapped row.
 Session mappings override defaults: `<Tab>` switches panels where available.
 The example above releases Tab to OpenCode and uses Ctrl+W then w to switch panels.
 Native commands still depend on the current UI context.
+
+## Action chains
+
+An action can also be a list of steps, run in order from one key press:
+
+```json
+{
+  "keymaps": {
+    "normal": {
+      "<C-g>n": ["insert", "text:帮我实现这个功能", "agent:build", "submit"]
+    }
+  }
+}
+```
+
+A chain may mix every action above except `switch-panel` and `passthrough`. The
+`text:` payload is literal: everything after the colon is inserted as-is, so
+spaces, punctuation, newlines and non-ASCII text need no key notation.
+
+`agent:` switches the session agent before the next step, for example
+`["agent:build", "text:go", "submit"]`. A chain's `submit` sends the prompt
+through OpenCode's session API — the same path the host uses for slash commands —
+because the text is inserted programmatically and the host's own submit path
+replaces the pinned agent with its client-side selection. A slash payload runs its
+command when it exists and is sent as a prompt otherwise.
+
+A `submit` action that is not a chain step (for example `"<C-s>": "submit"`) uses
+the host's submit path, and closes OpenCode's prompt completion first: while a
+slash command or `@` mention is being completed, that completion owns submission
+and dispatching `prompt.submit` is ignored.
+
+The home screen has no session to switch yet, so a failing `agent:` step aborts
+the rest of the chain.
+
+Chains run in the triggered mode. Enter another mode first (`["normal", "dw"]`)
+before a Vim key sequence step, because a Vim key sequence inside insert mode is
+rejected and aborts the chain. `submit` clears the prompt, so place it last.
 
 ## Key notation
 
@@ -69,6 +110,10 @@ mapping.
 
 `keymapTimeout` sets the wait between keys in a custom mapping; the default is
 500 ms. Unmatched or timed-out insert prefixes become ordinary text.
+
+A mapping that is a prefix of another mapping wins immediately: with both
+`<C-g>` and `<C-g>n` mapped, `<C-g>` fires without waiting, so `<C-g>n` becomes
+unreachable. Leave prefix keys unmapped when a longer sequence uses them.
 
 ## OpenCode commands
 

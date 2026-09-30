@@ -2,7 +2,7 @@ import type { KeyEvent, WidthMethod } from "@opentui/core"
 import { TextBuffer, createInitialContext, createKeybindMap, executeOperatorOnRange, parseKeySequence, processKeystroke, resetContext, resolveMotion } from "@vimee/core"
 import type { CursorPosition, KeybindDefinition, KeybindMap, MotionRange, Operator, ValidKeySequence, VimAction as VimeeAction, VimContext, VimMode as VimeeMode } from "@vimee/core"
 import { focusedInput, setInput, type EditBufferLike, type PromptContext } from "./actions"
-import type { VimConfig } from "./config"
+import type { VimConfig, VimMappedAction } from "./config"
 import type { VimLog } from "./log"
 import { createGraphemeCodec } from "./graphemes"
 import { displayToChar, displayWidth, createPromptMap, hostCharOffset, hostFromVimOffset, hostOffset, hostPosition, vimLineLength, vimOffsetFromPosition, type PromptMap } from "./map"
@@ -11,9 +11,10 @@ import { WORD_MOTION_KEYS, wordMotion, wordTextObject, type WordDecoder } from "
 
 type VimState = ReturnType<typeof createVimState>
 type HostAction = VimeeAction & { register?: string } | { type: "submit" } | { type: "command"; command: string }
-type HostKeybindAction = "normal" | "submit" | "command"
-type HostKeybindDefinition = KeybindDefinition & { hostAction?: HostKeybindAction; command?: string }
+type HostKeybindAction = "normal" | "submit" | "command" | "chain"
+type HostKeybindDefinition = KeybindDefinition & { hostAction?: HostKeybindAction; command?: string; steps?: readonly string[] }
 type HostRange = { start: number; end: number }
+type ChainState = { agent: string | undefined }
 
 export const YANK_FLASH_MS = 250
 
@@ -137,9 +138,11 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
             }
             return finish()
 
-            function finish() {
+            function finish(): boolean | Promise<boolean> {
                 let result
                 if (resolved?.status === "matched") {
+                    const steps = chainSteps(resolved.definition)
+                    if (steps) return runChain(steps, ctx, complete)
                     const actions = applyKeybind(resolved.definition, ctx, map)
                     result = { newCtx: vim, actions }
                 } else {
@@ -153,16 +156,20 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
                 vim = result.newCtx
                 const actions = result.actions as HostAction[]
                 if (resolved?.status !== "matched") applyActions(actions, ctx, map)
-                if (shouldFlashYank) flashYank(ctx, activeMap, yankAction(actions), visualYankRange)
-                syncMode(state, vim.mode)
+                return complete(actions)
 
-                const keybindPending = keybinds?.isPending() ?? false
-                if (wasPending && !keybindPending && pendingBefore && state.mode() === "insert") flushPendingInsert(ctx, pendingBefore, hostCharOffset(map, displayOff))
-                pendingInsert = keybindPending && state.mode() === "insert" ? plainPending(vim.statusMessage) : ""
-                state.setPending(pendingDisplay(vim, keybindPending))
-                updateTimeout(ctx)
-                log("vimee.key", { key, vimeeKey, mode: vim.mode, phase: vim.phase, cursor: vim.cursor, actions: actions.map((action) => action.type) })
-                return consumesKey(commandKey, actions, vim, keybindPending)
+                function complete(completed: HostAction[]): boolean {
+                    if (shouldFlashYank) flashYank(ctx, activeMap, yankAction(completed), visualYankRange)
+                    syncMode(state, vim.mode)
+
+                    const keybindPending = keybinds?.isPending() ?? false
+                    if (wasPending && !keybindPending && pendingBefore && state.mode() === "insert") flushPendingInsert(ctx, pendingBefore, hostCharOffset(map, displayOff))
+                    pendingInsert = keybindPending && state.mode() === "insert" ? plainPending(vim.statusMessage) : ""
+                    state.setPending(pendingDisplay(vim, keybindPending))
+                    updateTimeout(ctx)
+                    log("vimee.key", { key, vimeeKey, mode: vim.mode, phase: vim.phase, cursor: vim.cursor, actions: completed.map((action) => action.type) })
+                    return consumesKey(commandKey, completed, vim, keybindPending)
+                }
             }
         },
         cleanup: suspend,
@@ -170,8 +177,10 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
 
     function needsClipboard(key: string, ctrl: boolean, definition?: KeybindDefinition) {
         if (definition) {
+            const steps = chainSteps(definition)
+            if (steps) return steps.some((step) => sequenceNeedsClipboard(step))
             if ("execute" in definition) return false
-            return parseKeySequence(definition.keys).some((token) => ["p", "P", ".", "@"].includes(token))
+            return sequenceNeedsClipboard(definition.keys)
         }
         if (ctrl) return false
         if (vim.phase === "macro-execute-pending") return true
@@ -290,7 +299,7 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
         syncVisualSelection(input, currentMap, ctx)
     }
 
-    function handleInsertKeybind(event: KeyEvent, key: string, ctx: PromptContext): boolean {
+    function handleInsertKeybind(event: KeyEvent, key: string, ctx: PromptContext): boolean | Promise<boolean> {
         if (!keybinds?.hasKeybinds("insert") && !keybinds?.isPending()) return false
 
         const wasPending = keybinds.isPending()
@@ -309,6 +318,16 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
                 updateTimeout(ctx)
                 return true
             case "matched": {
+                const steps = chainSteps(resolved.definition)
+                if (steps) {
+                    pendingInsert = ""
+                    state.setPending("")
+                    updateTimeout(ctx)
+                    return runChain(steps, ctx, (actions) => {
+                        log("vimee.keybind", { key, mode: vim.mode, phase: vim.phase, cursor: vim.cursor, actions: actions.map((action) => action.type) })
+                        return true
+                    })
+                }
                 if (applyInsertKeybind(resolved.definition, ctx)) {
                     pendingInsert = ""
                     state.setPending("")
@@ -396,6 +415,155 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
             actions = [...actions, ...(result.actions as HostAction[])]
         }
         return actions
+    }
+
+    /**
+     * Runs a mapping's action chain in order. Synchronous steps keep the
+     * chain synchronous; `agent:` steps resolve asynchronously and the rest of
+     * the chain continues afterwards. A failed step aborts the chain, so a
+     * trailing `submit` never runs with the wrong host state.
+     */
+    function runChain(steps: readonly string[], ctx: PromptContext, done: (actions: HostAction[]) => boolean): boolean | Promise<boolean> {
+        const actions: HostAction[] = []
+        const chain: ChainState = { agent: undefined }
+        let map = chainMap(ctx)
+        let index = 0
+
+        const advance = (): boolean | Promise<boolean> => {
+            while (index < steps.length) {
+                const step = steps[index++]
+                const result = chainStep(step, ctx, map, actions, chain)
+                if (result === "abort") return done(actions)
+                if (result instanceof Promise) {
+                    return result.then((ok) => {
+                        if (!ok) return done(actions)
+                        map = chainMap(ctx)
+                        return advance()
+                    })
+                }
+                map = result
+            }
+            return done(actions)
+        }
+
+        return advance()
+    }
+
+    function chainStep(step: string, ctx: PromptContext, map: PromptMap, actions: HostAction[], chain: ChainState): PromptMap | "abort" | Promise<boolean> {
+        if (step === "normal") {
+            if (vim.mode !== "normal") enterNormal(ctx)
+            return chainMap(ctx)
+        }
+        if (step === "insert") {
+            if (vim.mode !== "insert") {
+                const result = processKey("i")
+                vim = result.newCtx
+                applyActions(result.actions, ctx, map)
+            }
+            return chainMap(ctx)
+        }
+        if (step === "submit") {
+            actions.push({ type: "submit" })
+            // Chain text is inserted programmatically, which races the host's own
+            // submit path and its client-side agent selection, so send through the
+            // session API when the host supports it.
+            if (ctx.sendPrompt) {
+                const sent = ctx.sendPrompt(chain.agent)
+                if (sent instanceof Promise) {
+                    return sent.then((ok) => {
+                        if (ok) return true
+                        ctx.prompt()?.submit()
+                        return true
+                    })
+                }
+                if (sent) return map
+            }
+            ctx.prompt()?.submit()
+            return map
+        }
+        if (step.startsWith("command:")) {
+            const command = step.slice("command:".length).trim()
+            actions.push({ type: "command", command } as HostAction)
+            dispatchCommand(command, ctx)
+            return map
+        }
+        if (step.startsWith("agent:")) {
+            const name = step.slice("agent:".length).trim()
+            const switchAgent = ctx.switchAgent
+            if (!switchAgent) {
+                log("vimee.keybind.agent", { step, error: "unsupported" })
+                return "abort"
+            }
+            let result: boolean | Promise<boolean>
+            try {
+                result = switchAgent(name)
+            } catch {
+                result = false
+            }
+            if (result instanceof Promise) {
+                const before = generation
+                return result.then((ok) => {
+                    // A focus change or editor swap cancels the rest of the chain.
+                    if (before !== generation) return false
+                    if (ok) chain.agent = name
+                    else log("vimee.keybind.agent", { step, error: "failed" })
+                    return ok
+                })
+            }
+            if (!result) {
+                log("vimee.keybind.agent", { step, error: "failed" })
+                return "abort"
+            }
+            chain.agent = name
+            return map
+        }
+        if (step.startsWith("text:")) {
+            insertLiteralText(ctx, step.slice("text:".length))
+            return chainMap(ctx)
+        }
+        const sequence = chainSequence(step)
+        if (!sequence) return map
+        if (vim.mode === "insert") {
+            log("vimee.keybind.unsupported", { step })
+            return "abort"
+        }
+        for (const token of parseKeySequence(sequence)) {
+            const result = processKey(codec.encode(keyToken(token)), tokenCtrl(token))
+            vim = result.newCtx
+            // Keep the host layout current for later steps.
+            applyActions(result.actions, ctx, activeMap)
+            actions.push(...(result.actions as HostAction[]))
+        }
+        return chainMap(ctx)
+    }
+
+    // Re-reads the host text after a step so later steps see the current buffer and cursor.
+    function chainMap(ctx: PromptContext): PromptMap {
+        const ref = ctx.prompt()
+        const input = focusedInput(ctx)
+        const map = mapForHostText(input?.plainText ?? ref?.current.input ?? "")
+        const offset = clamp(input?.cursorOffset ?? map.displayWidth, 0, map.displayWidth)
+        vim = { ...vim, cursor: hostPosition(map, offset) }
+        return map
+    }
+
+    function insertLiteralText(ctx: PromptContext, value: string) {
+        if (!value) return
+        const ref = ctx.prompt()
+        const input = focusedInput(ctx)
+        if (!ref) return
+
+        if (input?.insertText && !input.isDestroyed) {
+            input.clearSelection?.()
+            input.insertText(value)
+            return
+        }
+
+        const text = input?.plainText ?? ref.current.input
+        const offset = displayToChar(text, Math.max(0, input?.cursorOffset ?? 0), widthMethod)
+        const next = text.slice(0, offset) + value + text.slice(offset)
+        setInput(ref, next)
+        if (input) input.cursorOffset = displayWidth(next.slice(0, offset + value.length), widthMethod)
     }
 
     function processKey(key: string, ctrl = false): { newCtx: VimContext; actions: HostAction[] } {
@@ -895,7 +1063,8 @@ function createKeybinds(config: VimConfig, log: VimLog): KeybindMap | undefined 
     return count > 0 ? map : undefined
 }
 
-function keybindAction(action: string): HostKeybindDefinition {
+function keybindAction(action: VimMappedAction): HostKeybindDefinition {
+    if (typeof action !== "string") return chainAction(action)
     if (action.startsWith("command:")) {
         const command = action.slice(8).trim()
         if (!command) throw new Error("Command name is required")
@@ -913,7 +1082,46 @@ function keybindAction(action: string): HostKeybindDefinition {
         case "submit":
             return { execute: () => [{ type: "submit" } as unknown as VimeeAction], hostAction: "submit" }
         default:
+            if (action.startsWith("agent:") || action.startsWith("text:")) return chainAction([action])
             return { keys: action }
+    }
+}
+
+function chainAction(steps: readonly string[]): HostKeybindDefinition {
+    if (steps.length === 0) throw new Error("Action chain must not be empty")
+    for (const step of steps) validateChainStep(step)
+    return { execute: () => [], hostAction: "chain", steps }
+}
+
+function validateChainStep(step: string) {
+    if (step.startsWith("command:")) {
+        if (!step.slice("command:".length).trim()) throw new Error("Command name is required")
+        return
+    }
+    if (step.startsWith("agent:")) {
+        if (!step.slice("agent:".length).trim()) throw new Error("Agent name is required")
+        return
+    }
+    const sequence = chainSequence(step)
+    if (sequence) parseKeySequence(sequence)
+}
+
+function chainSteps(definition: KeybindDefinition): readonly string[] | undefined {
+    return (definition as HostKeybindDefinition).steps
+}
+
+/** A chain step that is a Vim key sequence, or undefined for host actions. */
+function chainSequence(step: string): string | undefined {
+    if (step === "normal" || step === "insert" || step === "submit") return undefined
+    if (step.startsWith("command:") || step.startsWith("agent:") || step.startsWith("text:")) return undefined
+    return step
+}
+
+function sequenceNeedsClipboard(sequence: string) {
+    try {
+        return parseKeySequence(sequence).some((token) => ["p", "P", ".", "@"].includes(token))
+    } catch {
+        return false
     }
 }
 

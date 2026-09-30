@@ -6,6 +6,14 @@ export async function installOpenCode() {
     if ((process.platform !== "linux" && process.platform !== "darwin") || (process.arch !== "x64" && process.arch !== "arm64")) {
         throw new Error(`OpenCode E2E tests do not support ${process.platform}/${process.arch}`)
     }
+    // Reuse an installed binary for offline runs: VIM_E2E_OPENCODE=/path/to/opencode.
+    const configured = process.env.VIM_E2E_OPENCODE
+    if (configured) {
+        const version = execFileSync(configured, ["--version"], { encoding: "utf8" }).trim().replace(/^opencode v/, "")
+        if (!/^2\.\d+\.\d+$/.test(version)) throw new Error(`Expected a stable OpenCode V2 binary, received ${version}`)
+        console.log(`OpenCode E2E version: ${version} (${configured})`)
+        return { binary: configured, version }
+    }
     const release = await fetch("https://opencode.ai/update/api/latest/cli/npm", { signal: AbortSignal.timeout(30_000) })
     if (!release.ok) throw new Error(`Could not resolve the latest OpenCode release: ${release.status}`)
     const { version } = await release.json() as { version: string }

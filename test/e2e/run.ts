@@ -5,6 +5,7 @@ import { runWithFixture, type Fixture, type FixtureSetup } from "./support/fixtu
 import { installOpenCode } from "./support/opencode"
 import { copySourcePlugin, packPlugin } from "./support/plugin"
 import { agentSwitching } from "./scenarios/agent-switching"
+import { keymapChains } from "./scenarios/keymap-chains"
 import { dialogFocus, dialogMappings, dialogModeInheritance, dialogScope, promptDialog } from "./scenarios/dialog-focus"
 import { tabSwitching } from "./scenarios/tab-switching"
 import { messageReader, readerLayout } from "./scenarios/message-reader"
@@ -51,6 +52,18 @@ const scenarios: Array<{ name: string; run: (fixture: Fixture) => Promise<void>;
     { name: "question-forms-zz", run: questionForms("zz"), setup: { vim: { keymaps: { insert: { zz: "<Esc>", "<C-s>": "submit" } } } } },
     { name: "agent-switching", run: agentSwitching },
     { name: "agent-switching-tab-mapping", run: (fixture) => agentSwitching(fixture, true), setup: { vim: { keymaps: { normal: { "<Tab>": "x" } } } } },
+    { name: "keymap-chains", run: keymapChains, setup: {
+        stream: "chain response", vim: {
+            defaultMode: "normal", keymapTimeout: 5000,
+            keymaps: {
+                normal: {
+                    "<C-g>n": ["insert", "text:chain submit", "agent:build", "submit"],
+                    "<C-g>s": ["insert", "text:/chain-slash", "agent:build", "submit"],
+                },
+                insert: { "<C-s>": "submit" },
+            },
+        },
+    } },
     { name: "message-reader", run: messageReader, setup: { messages: readerMessages } },
     { name: "reader-layout", run: readerLayout, setup: { messages: longReaderMessages } },
     { name: "session-empty", run: emptySession },
