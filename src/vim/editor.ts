@@ -9,6 +9,10 @@ export type EditorContext = {
   blur: () => void
   dispatchCommand: (command: string) => { ok: boolean }
   requestRender: () => void
+  /** Switches the host agent; resolves false when no session can switch. */
+  switchAgent?: (name: string) => boolean | Promise<boolean>
+  /** Sends the prompt text to the session, bypassing the host's own submit path. */
+  sendPrompt?: (agent: string | undefined) => boolean | Promise<boolean>
 }
 
 export type EditorInput = {
