@@ -8,7 +8,7 @@ import { createVimConfig } from "./vim/config"
 import { editInput } from "./vim/edit"
 import { keyNotation } from "./vim/keys"
 import { createVimLog } from "./vim/log"
-import { displayToChar } from "./vim/map"
+import { charToDisplay, displayToChar } from "./vim/map"
 import { createVimState, type VimMode } from "./vim/state"
 import { createVimeeAdapter } from "./vim/vimee"
 import { VimStatus } from "./vim/status"
@@ -18,6 +18,7 @@ import { createFormMode } from "./ui/form"
 import { handleComposerKey } from "./ui/composer"
 import { createTerminalControls } from "./ui/terminal"
 import { createInputSourceController } from "./vim/input-source"
+import { createInlineController, trimInlineText } from "./vim/inline"
 
 export default Plugin.define({
   id: "opencode-vim",
@@ -65,6 +66,7 @@ function VimHost(props: { context: Context }) {
     log,
     notify: (message) => props.context.ui.toast.show({ message, variant: "warning" }),
   })
+  const inline = createInlineController(config.inline)
   let pendingKeys: Array<KeyEvent | PasteEvent> | undefined
   let disposed = false
 
@@ -78,6 +80,7 @@ function VimHost(props: { context: Context }) {
         <VimStatus
           mode={() => (dialogFocused() ? dialogState.mode() : state.mode())}
           enabled={enabled}
+          inline={inline.active}
           source={inputSource.source}
           inputSource={config.inputSource}
           theme={{
@@ -143,6 +146,31 @@ function VimHost(props: { context: Context }) {
     const key = keyNotation(event)
     if (!key) return
     const mapped = normalMappings.some((sequence) => sequence.startsWith(key))
+
+    if (kind === "prompt") {
+      const modified = event.shift || event.ctrl || event.option || event.meta || event.super
+      const action = inline.handleKey({
+        key: modified && key === "<CR>" ? "<CR+mod>" : key,
+        mode: state.mode(),
+        role: sourceRole(),
+        cursor: cursorIndex(),
+      })
+      if (action) {
+        if (action.consume) {
+          event.preventDefault()
+          event.stopPropagation()
+        }
+        if (action.kind === "enter") {
+          inputSource.setSource("normal")
+        } else {
+          if (action.trimHead || action.trimTail) trimInlineSpaces(action.anchor, action.trimHead, action.trimTail)
+          inputSource.setSource("other")
+        }
+        syncCursor(true)
+        if (action.consume) return
+      }
+    }
+
     if (kind === "prompt" && key === config.sessionKey && !mapped && state.mode() === "normal" && !vimee.isPending()) {
       if (session.enter()) {
         event.preventDefault()
@@ -240,10 +268,12 @@ function VimHost(props: { context: Context }) {
     if (!enabled()) {
       inputSource.setActive(false)
       inputSource.reset()
+      inline.close()
       return
     }
     inputSource.setActive(inputKind(props.context) !== undefined)
     const mode = dialogFocused() ? dialogState.mode() : state.mode()
+    if (mode !== "insert") inline.close()
     inputSource.sync(mode, readInsertContext())
   })
   let route = props.context.ui.router.current()
@@ -257,6 +287,7 @@ function VimHost(props: { context: Context }) {
     pendingKeys = undefined
     removeStatus()
     session.close()
+    inline.close()
     props.context.renderer.keyInput.off("keypress", onKey)
     props.context.renderer.keyInput.off("paste", onPaste)
     props.context.renderer.off("focused_editor", onFocus)
@@ -313,6 +344,33 @@ function VimHost(props: { context: Context }) {
     if (!input) return undefined
     const text = input.plainText ?? ""
     return { text, position: displayToChar(text, Math.max(0, input.cursorOffset ?? 0)) }
+  }
+
+  function sourceRole(): "normal" | "other" | undefined {
+    const source = inputSource.source()
+    if (source === undefined) return undefined
+    return source === config.inputSource.normal ? "normal" : "other"
+  }
+
+  function trimInlineSpaces(anchor: number | undefined, trimHead: boolean, trimTail: boolean) {
+    const input = props.context.renderer.currentFocusedEditor
+    if (!input) return
+    const before = input.plainText ?? ""
+    const cursor = cursorIndex()
+    const result = trimInlineText(before, cursor, anchor, trimHead, trimTail)
+    if (result.text === before) return
+
+    editInput(input, result.text, props.context.renderer.widthMethod)
+    // editInput leaves the cursor at the edit point; keep it at its old
+    // position relative to the end of the text instead.
+    input.cursorOffset = charToDisplay(result.text, result.cursor, props.context.renderer.widthMethod)
+  }
+
+  function cursorIndex() {
+    const input = props.context.renderer.currentFocusedEditor
+    if (!input) return 0
+    const text = input.plainText ?? ""
+    return displayToChar(text, Math.max(0, input.cursorOffset ?? 0))
   }
 
   function syncCursorColor() {

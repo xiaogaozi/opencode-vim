@@ -34,6 +34,7 @@ All options below belong inside `options.vim`.
 | `keymaps` | `{}` | Custom mappings, grouped by mode; values may be action chains |
 | `cursorStyles` | See below | Cursor appearance for each editing mode |
 | `inputSource` | disabled | Switch the OS input method per editing mode; see below |
+| `inline` | disabled | Double-space inline English region; see below |
 | `debug` | `false` | Enable debug logging |
 | `debugPath` | `~/.cache/opencode/opencode-vim.log` | Debug log file |
 
@@ -179,6 +180,40 @@ automatically. Example configuration inside `options.vim`:
 The plugin resets to the `normal` source and the default cursor color when Vim
 mode is disabled or the plugin unloads. Switching does not apply over SSH,
 because the helper runs on the machine that hosts the TUI.
+
+### Inline English region
+
+`inline` implements `emacs-smart-input-source`'s inline mode inside the prompt.
+It needs the input source switching above to be enabled:
+
+```json
+{
+  "inputSource": {
+    "enabled": true,
+    "normal": "com.apple.keylayout.ABC",
+    "insert": "im.rime.inputmethod.Squirrel.Hans"
+  },
+  "inline": {
+    "enabled": true
+  }
+}
+```
+
+- A single space typed while the other input source is active opens the region
+  and switches to the normal (English) source, matching
+  `emacs-smart-input-source`'s inline English mode.
+- While the region is open the prompt footer shows `INLINE` in the info color
+  instead of `INSERT`.
+- Two spaces in a row close the region and switch back to the other source.
+  `timeoutMs` (default `400`) is the maximum gap between them.
+- `Enter` closes the region instead of submitting. Press `Enter` again to
+  submit, or `Esc` and submit from normal mode. Set `enterCloses` to `false` to
+  keep `Enter` submitting while the region is open.
+- Closing removes one space of the head run (the space that opened the region)
+  and one space before the cursor. For example `中文测试` + two spaces + `abc`
+  + one space + `Enter` + `，` produces `中文测试 abc，`, and `，` + one space +
+  `abc` + two spaces + `Enter` + `中文测试` produces `，abc 中文测试`.
+- The region also closes when insert mode is left or Vim mode is disabled.
 
 ### Debugging
 
