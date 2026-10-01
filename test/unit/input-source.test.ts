@@ -140,6 +140,49 @@ describe("input source controller", () => {
         expect(fake.calls).toEqual(["set:im.cn"])
     })
 
+    test("inconclusive punctuation stays english", async () => {
+        const fake = createFakeRunner()
+        const controller = createController(testConfig(), { runner: fake.runner })
+
+        controller.sync("insert")
+        controller.sync("normal")
+        await controller.settle()
+        fake.calls.length = 0
+
+        controller.sync("insert", { text: "()", position: 1 })
+        await controller.settle()
+        // The remembered source is im.cn, but ASCII punctuation must not switch.
+        expect(fake.calls).toEqual([])
+    })
+
+    test("digits stay english", async () => {
+        const fake = createFakeRunner()
+        const controller = createController(testConfig(), { runner: fake.runner })
+
+        controller.sync("insert")
+        controller.sync("normal")
+        await controller.settle()
+        fake.calls.length = 0
+
+        controller.sync("insert", { text: "12", position: 2 })
+        await controller.settle()
+        expect(fake.calls).toEqual([])
+    })
+
+    test("a blank prompt falls back to the remembered source", async () => {
+        const fake = createFakeRunner()
+        const controller = createController(testConfig(), { runner: fake.runner })
+
+        controller.sync("insert")
+        controller.sync("normal")
+        await controller.settle()
+        fake.calls.length = 0
+
+        controller.sync("insert", { text: "  ", position: 2 })
+        await controller.settle()
+        expect(fake.calls).toEqual(["set:im.cn"])
+    })
+
     test("coalesces rapid transitions", async () => {
         const fake = createFakeRunner()
         const controller = createController(testConfig(), { runner: fake.runner })
