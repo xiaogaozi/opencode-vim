@@ -109,9 +109,11 @@ automatically. Example configuration inside `options.vim`:
   source that was active when insert mode was left.
 - `context` (default `true`) looks at the characters around the cursor when
   entering insert mode: text right after a Chinese character stays Chinese,
-  text right after an English word stays English, and ambiguous contexts fall
-  back to `insert` or the remembered source. `englishPattern`, `otherPattern`,
-  and `contextAggressiveLine` tune the detection.
+  text right after an English word stays English, and a non-blank prompt with
+  no clear language (ASCII punctuation, digits) stays English. Only an empty or
+  blank prompt falls back to `insert` or the remembered source.
+  `englishPattern`, `otherPattern`, and `contextAggressiveLine` tune the
+  detection.
 - `pollInterval` in milliseconds (default `500`) re-reads the input source while
   editing, so manual switches (for example with `Ctrl+Space`) also update the
   footer indicator and cursor color and are remembered. Set it to `0` to disable
