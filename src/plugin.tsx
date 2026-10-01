@@ -15,7 +15,8 @@ import { SESSION_MODE, createSessionMode } from "./session"
 import { createVimClipboard } from "./clipboard"
 import { createFormMode } from "./form"
 import { createInputSourceController } from "./modules/vim/input-source"
-import { createInlineController, inlineKeyFor, trimInlineText } from "./modules/vim/inline"
+import { createInlineController, inlineKeyFor, trimInlineSteps } from "./modules/vim/inline"
+import type { InlineTailTrim } from "./modules/vim/inline"
 
 type Context = Parameters<Parameters<typeof Plugin.define>[0]["setup"]>[0]
 
@@ -136,7 +137,7 @@ function VimHost(props: { context: Context }) {
         if (action.kind === "enter") {
           inputSource.setSource("normal")
         } else {
-          if (action.trimHead || action.trimTail) trimInlineSpaces(action.anchor, action.trimHead, action.trimTail)
+          if (action.trimHead || action.trimTail !== "none") trimInlineSpaces(action.anchor, action.trimHead, action.trimTail)
           inputSource.setSource("other")
         }
         syncCursor(true)
@@ -324,18 +325,21 @@ function VimHost(props: { context: Context }) {
     return props.context.keymap.commands().some((item) => item.id === "prompt.autocomplete.hide")
   }
 
-  function trimInlineSpaces(anchor: number | undefined, trimHead: boolean, trimTail: boolean) {
+  function trimInlineSpaces(anchor: number | undefined, trimHead: boolean, trimTail: InlineTailTrim) {
     const input = props.context.renderer.currentFocusedEditor
     if (!input) return
     const before = input.plainText ?? ""
-    const cursor = cursorIndex()
-    const result = trimInlineText(before, cursor, anchor, trimHead, trimTail)
-    if (result.text === before) return
+    const steps = trimInlineSteps(before, cursorIndex(), anchor, trimHead, trimTail)
+    const last = steps[steps.length - 1]
+    if (!last) return
 
-    editInput(input, result.text, props.context.renderer.widthMethod)
+    // Each step is a separate minimal edit. A single edit trimming both the
+    // head and the tail would replace the text in between as well, dropping
+    // the host's extmarks (file references) that live there.
+    for (const step of steps) editInput(input, step.text, props.context.renderer.widthMethod)
     // editInput leaves the cursor at the edit point; keep it at its old
     // position relative to the end of the text instead.
-    input.cursorOffset = charToDisplay(result.text, result.cursor, props.context.renderer.widthMethod)
+    input.cursorOffset = charToDisplay(last.text, last.cursor, props.context.renderer.widthMethod)
   }
 
   function cursorIndex() {

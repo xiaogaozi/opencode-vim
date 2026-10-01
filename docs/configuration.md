@@ -169,10 +169,11 @@ It needs the input source switching above to be enabled:
   keep `Enter` submitting while the region is open.
 - While the prompt completion (`/` commands, `@` mentions) is open, `Enter`
   selects the highlighted item instead; the region stays open.
-- Closing removes one space of the head run (the space that opened the region)
-  and one space before the cursor. For example `中文测试` + two spaces + `abc`
-  + one space + `Enter` + `，` produces `中文测试 abc，`, and `，` + one space +
-  `abc` + two spaces + `Enter` + `中文测试` produces `，abc 中文测试`.
+- Closing removes one space of the head run (the space that opened the region).
+  `Enter` also removes one space before the cursor, while closing with two
+  spaces leaves at most one trailing space. For example `中文测试` + two spaces
+  + `abc` + one space + `Enter` + `，` produces `中文测试 abc，`, and `，` + one
+  space + `abc` + two spaces + `Enter` + `中文测试` produces `，abc 中文测试`.
 - The region also closes when insert mode is left or Vim mode is disabled.
 
 ### Debugging
