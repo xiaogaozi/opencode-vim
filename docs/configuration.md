@@ -167,6 +167,8 @@ It needs the input source switching above to be enabled:
 - `Enter` closes the region instead of submitting. Press `Enter` again to
   submit, or `Esc` and submit from normal mode. Set `enterCloses` to `false` to
   keep `Enter` submitting while the region is open.
+- While the prompt completion (`/` commands, `@` mentions) is open, `Enter`
+  selects the highlighted item instead; the region stays open.
 - Closing removes one space of the head run (the space that opened the region)
   and one space before the cursor. For example `中文测试` + two spaces + `abc`
   + one space + `Enter` + `，` produces `中文测试 abc，`, and `，` + one space +

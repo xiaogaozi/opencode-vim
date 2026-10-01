@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { VimInline } from "../../src/modules/vim/inline"
-import { createInlineController, trimInlineText } from "../../src/modules/vim/inline"
+import { createInlineController, inlineKeyFor, trimInlineText } from "../../src/modules/vim/inline"
 
 function testConfig(overrides: Partial<VimInline> = {}): VimInline {
     return {
@@ -107,5 +107,20 @@ describe("inline trim", () => {
 
     test("keeps the cursor relative to the end", () => {
         expect(trimInlineText("abc def", 6, undefined, false, false)).toEqual({ text: "abc def", cursor: 6 })
+    })
+})
+
+describe("inline key rewriting", () => {
+    test("leaves Enter to the region when it owns it", () => {
+        expect(inlineKeyFor("<CR>", false)).toBe("<CR>")
+    })
+
+    test("rewrites Enter when the completion or a modifier owns it", () => {
+        expect(inlineKeyFor("<CR>", true)).toBe("<CR-skip>")
+    })
+
+    test("leaves other keys untouched", () => {
+        expect(inlineKeyFor("a", true)).toBe("a")
+        expect(inlineKeyFor("<Space>", true)).toBe("<Space>")
     })
 })

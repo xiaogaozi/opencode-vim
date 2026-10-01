@@ -34,6 +34,15 @@ export const DEFAULT_INLINE: VimInline = {
 }
 
 /**
+ * The key to feed the inline controller. Enter is rewritten when it must not
+ * close the region (modified keys, or the prompt completion owns it) so the
+ * controller still resets its double-space timer without closing.
+ */
+export function inlineKeyFor(key: string, bypassEnter: boolean): string {
+    return bypassEnter && key === "<CR>" ? "<CR-skip>" : key
+}
+
+/**
  * Removes one space at the region head and/or one space before the cursor.
  * Returns the new text together with the cursor kept at its old position
  * relative to the end (edit primitives would otherwise move it to the edit).

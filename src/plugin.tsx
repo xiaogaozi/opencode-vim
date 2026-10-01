@@ -15,7 +15,7 @@ import { SESSION_MODE, createSessionMode } from "./session"
 import { createVimClipboard } from "./clipboard"
 import { createFormMode } from "./form"
 import { createInputSourceController } from "./modules/vim/input-source"
-import { createInlineController, trimInlineText } from "./modules/vim/inline"
+import { createInlineController, inlineKeyFor, trimInlineText } from "./modules/vim/inline"
 
 type Context = Parameters<Parameters<typeof Plugin.define>[0]["setup"]>[0]
 
@@ -119,8 +119,11 @@ function VimHost(props: { context: Context }) {
 
     if (kind === "prompt") {
       const modified = event.shift || event.ctrl || event.option || event.meta || event.super
+      // The prompt completion owns Enter while it is showing; let it select the
+      // item instead of closing the inline region.
+      const bypassEnter = key === "<CR>" && (modified || completionVisible())
       const action = inline.handleKey({
-        key: modified && key === "<CR>" ? "<CR+mod>" : key,
+        key: inlineKeyFor(key, bypassEnter),
         mode: state.mode(),
         role: sourceRole(),
         cursor: cursorIndex(),
@@ -313,6 +316,12 @@ function VimHost(props: { context: Context }) {
     const source = inputSource.source()
     if (source === undefined) return undefined
     return source === config.inputSource.normal ? "normal" : "other"
+  }
+
+  // The host exposes `prompt.autocomplete.hide` only while the prompt
+  // completion is visible; Enter selects an item then.
+  function completionVisible() {
+    return props.context.keymap.commands().some((item) => item.id === "prompt.autocomplete.hide")
   }
 
   function trimInlineSpaces(anchor: number | undefined, trimHead: boolean, trimTail: boolean) {
