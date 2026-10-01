@@ -87,7 +87,14 @@ export function createInputSourceController(config: VimInputSource, deps: InputS
         if (previous === mode) return
 
         if (mode === "insert") {
-            const language = config.context && context ? detectContextLanguage(context.text, context.position, patterns) : undefined
+            let language = config.context && context ? detectContextLanguage(context.text, context.position, patterns) : undefined
+            // A non-blank prompt without a clear language (ASCII punctuation,
+            // digits) keeps English, matching emacs-smart-input-source's
+            // inconclusive-context behavior. Only a blank prompt falls back to
+            // the configured insert source.
+            if (language === undefined && config.context && context && context.text.trim() !== "") {
+                language = "english"
+            }
             enqueue({ kind: "insert", language })
         } else {
             enqueue({ kind: "normal" })
