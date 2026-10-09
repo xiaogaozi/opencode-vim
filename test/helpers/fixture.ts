@@ -13,7 +13,7 @@ export async function createFixture(
   width = 80,
   adapterOptions: Parameters<typeof createVimeeAdapter>[3] & {
     switchAgent?: (name: string) => boolean | Promise<boolean>
-    sendPrompt?: (agent: string | undefined) => boolean | Promise<boolean>
+    sendPrompt?: (agent: string | undefined, options?: { agentSwitched?: boolean }) => boolean | Promise<boolean>
   } = {},
 ) {
   const screen = await createTestRenderer({ width, height: 12, kittyKeyboard: true })
@@ -53,7 +53,10 @@ export async function createFixture(
     },
     requestRender: () => screen.renderer.requestRender(),
     switchAgent: adapterOptions.switchAgent && ((name: string) => adapterOptions.switchAgent!(name)),
-    sendPrompt: adapterOptions.sendPrompt && ((agent: string | undefined) => adapterOptions.sendPrompt!(agent)),
+    sendPrompt:
+      adapterOptions.sendPrompt &&
+      ((agent: string | undefined, options?: { agentSwitched?: boolean }) =>
+        adapterOptions.sendPrompt!(agent, options)),
   }
   let handled: boolean | Promise<boolean> = false
   const onKey = (event: KeyEvent) => {

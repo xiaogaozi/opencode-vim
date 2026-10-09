@@ -426,7 +426,7 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
       // submit path and its client-side agent selection, so send through the
       // session API when the host supports it.
       if (ctx.sendPrompt) {
-        const sent = ctx.sendPrompt(chain.agent)
+        const sent = ctx.sendPrompt(chain.agent, { agentSwitched: chain.agent !== undefined })
         if (sent instanceof Promise) {
           return sent.then((ok) => {
             if (ok) return true

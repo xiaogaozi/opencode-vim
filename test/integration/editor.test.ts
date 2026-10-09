@@ -433,17 +433,17 @@ describe("real textarea Vim editing", () => {
   })
 
   test("sends a pinned agent through the host session API", async () => {
-    const sends: Array<string | undefined> = []
+    const sends: Array<{ agent: string | undefined; agentSwitched: boolean | undefined }> = []
     fixture = await createFixture("", { keymaps: { normal: { Q: ["agent:build", "text:go", "submit"] } } }, 80, {
       switchAgent: () => true,
-      sendPrompt: (agent) => {
-        sends.push(agent)
+      sendPrompt: (agent, options) => {
+        sends.push({ agent, agentSwitched: options?.agentSwitched })
         return true
       },
     })
 
     await fixture.keys("Q")
-    expect(sends).toEqual(["build"])
+    expect(sends).toEqual([{ agent: "build", agentSwitched: true }])
     expect(fixture.submissions).toBe(0)
   })
 

@@ -5,11 +5,16 @@ export async function keymapChains({ terminal, request, sessionID, stream }: Fix
   const { keys, type, screen } = terminal
   const response = "chain response"
   const record = async () => (await request(`/api/session/${sessionID}`)).data.agent
+  const agentSwitches = async (): Promise<number> => {
+    const messages = (await request(`/api/session/${sessionID}/message`)).data as Array<{ type: string }>
+    return messages.filter((message) => message.type === "agent-switched").length
+  }
 
   // Start from Plan so the chain's agent step has something to change. The
   // host's own Tab switch needs its agent catalog first, which is slow on CI.
   await request(`/api/session/${sessionID}/agent`, { agent: "plan" })
   assert.equal(await record(), "plan")
+  const switchesBefore = await agentSwitches()
 
   // One chord enters insert mode, inserts preset text, pins the agent, and sends.
   await keys("C-g", "n")
@@ -25,6 +30,14 @@ export async function keymapChains({ terminal, request, sessionID, stream }: Fix
   await keys("C-g", "s")
   await screen("slash-submitted", (text) => text.includes("/chain-slash") && text.split(response).length >= 3)
   stream?.write("", true)
+
+  // Pinning an agent must not switch twice per chain (the submit step used to
+  // re-switch), and a chain already on its agent must not switch at all.
+  assert.equal(
+    (await agentSwitches()) - switchesBefore,
+    1,
+    "two agent-pinned chains switch the agent only once overall",
+  )
 
   // A single submit mapping has to close the completion the host opens for
   // slash text: dispatching prompt.submit is ignored while it shows.

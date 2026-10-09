@@ -458,7 +458,8 @@ function createEditorContext(context: Context, log: ReturnType<typeof createVimL
     },
     requestRender: () => context.renderer.requestRender(),
     switchAgent: (name: string) => switchAgent(context, name),
-    sendPrompt: (agent: string | undefined) => sendPrompt(context, agent, log),
+    sendPrompt: (agent: string | undefined, options?: { agentSwitched?: boolean }) =>
+      sendPrompt(context, agent, log, options),
   }
 }
 
@@ -484,11 +485,14 @@ const SUBMIT_RETRY_LIMIT = 10
  *
  * Prompts are submitted with the host's own client-side agent selection, so this
  * only records the switch; a chain that pinned an agent sends through the
- * session API instead (see `sendPrompt`).
+ * session API instead (see `sendPrompt`). Switching to the agent the session is
+ * already on is skipped, because OpenCode publishes an `agent-switched`
+ * transcript line for every call.
  */
 async function switchAgent(context: Context, name: string) {
   const route = context.ui.router.current()
   if (route.type !== "session") return false
+  if (context.data.session.get(route.sessionID)?.agent === name) return true
   try {
     await context.client.session.switchAgent({ sessionID: route.sessionID, agent: name })
     return true
@@ -498,7 +502,12 @@ async function switchAgent(context: Context, name: string) {
 }
 
 /** Sends a chain's prompt to the session, like the host does for slash commands. */
-async function sendPrompt(context: Context, agent: string | undefined, log: ReturnType<typeof createVimLog>) {
+async function sendPrompt(
+  context: Context,
+  agent: string | undefined,
+  log: ReturnType<typeof createVimLog>,
+  options: { agentSwitched?: boolean } = {},
+) {
   const route = context.ui.router.current()
   if (route.type !== "session") return false
   if (inputKind(context) !== "prompt") return false
@@ -506,7 +515,9 @@ async function sendPrompt(context: Context, agent: string | undefined, log: Retu
   const text = input?.plainText ?? ""
   if (!text.trim()) return false
   try {
-    if (agent) await context.client.session.switchAgent({ sessionID: route.sessionID, agent })
+    // A chain's `agent:` step already switched; switching again here would add
+    // a second `agent-switched` line to the transcript.
+    if (agent && !options.agentSwitched && !(await switchAgent(context, agent))) return false
     const slash = /^\/(\S+)\s*([\s\S]*)$/.exec(text)
     // Unknown slash text stays a prompt, matching the host's own submit path.
     if (slash && (await commandNames(context)).includes(slash[1])) {
