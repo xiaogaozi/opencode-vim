@@ -33,12 +33,18 @@ export function VimStatus(props: VimStatusProps) {
 
   return (
     <box paddingRight={1} flexDirection="row" flexShrink={0}>
-      <text fg={inlineActive() ? props.theme.info ?? props.theme.success : props.mode() === "insert" ? props.theme.success : props.theme.warning}>
+      <text
+        fg={
+          inlineActive()
+            ? (props.theme.info ?? props.theme.success)
+            : props.mode() === "insert"
+              ? props.theme.success
+              : props.theme.warning
+        }
+      >
         {props.enabled() ? modeLabel(props.mode(), inlineActive()) : ""}
       </text>
-      <Show when={indicator()}>
-        {(badge) => <text fg={badge().color}>{` ${badge().label}`}</text>}
-      </Show>
+      <Show when={indicator()}>{(badge) => <text fg={badge().color}>{` ${badge().label}`}</text>}</Show>
     </box>
   )
 }
