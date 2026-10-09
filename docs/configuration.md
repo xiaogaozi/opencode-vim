@@ -32,6 +32,7 @@ All options below belong inside `options.vim`.
 | `diffView` | `"after"` | Starting edit/patch view: `"after"`, `"before"`, or `"diff"`; added/deleted files use the available side |
 | `keymapTimeout` | `500` | Milliseconds to wait for the rest of a custom mapping |
 | `keymaps` | `{}` | Custom mappings, grouped by mode; values may be action chains |
+| `whichKey` | disabled | Pending-keymap popup listing the available shortcuts; see below |
 | `cursorStyles` | See below | Cursor appearance for each editing mode |
 | `inputSource` | disabled | Switch the OS input method per editing mode; see below |
 | `inline` | disabled | Double-space inline English region; see below |
@@ -57,6 +58,37 @@ message/tool modals, and `keymaps.panes` for shared prompt/terminal controls.
 See [Custom Keymaps](./keymap-actions.md) for actions, action chains, key
 notation, and examples.
 See [Keybindings and Modes](./vim-behavior.md) for the default behavior.
+
+### Which-key
+
+`whichKey` shows a popup above the prompt while a custom mapping's prefix is
+pending, listing the mappings that start with the keys pressed so far:
+
+```json
+{
+  "whichKey": { "enabled": true }
+}
+```
+
+The popup is driven by `keymaps`: pressing `<C-g>` lists its `<C-g>...`
+mappings, pressing the next key narrows the list, and completing a mapping or
+leaving the pending state closes it. Candidates are listed in alphabetical
+order of their remaining keys, and the popup reuses the theme colors of
+OpenCode's own prompt completion. Descriptions are inferred from each mapping's
+action — `text:` payloads, `command:` titles, `agent:` steps, and Vim key
+sequences — or set explicitly with the object form described in
+[Custom Keymaps](./keymap-actions.md). `keymaps.session` and `keymaps.panes`
+are not listed.
+
+While the popup is visible, `↑`/`↓` (or `<C-n>`/`<C-p>`) move the highlight
+and `Enter` runs the highlighted mapping; the alphabetically first entry starts
+highlighted. Typing the next keys still narrows the list or runs a mapping as
+usual, and `Esc` cancels.
+
+While `whichKey` is enabled, a pending editing mapping no longer times out: it
+stays open until the next key. An unmatched key still falls through to the
+editor, and an insert-mode mapping still inserts its pending characters first.
+Disable `whichKey` to restore `keymapTimeout`.
 
 ### Pane controls
 

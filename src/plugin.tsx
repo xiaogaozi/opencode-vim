@@ -20,6 +20,7 @@ import { createTerminalControls } from "./ui/terminal"
 import { createInputSourceController } from "./vim/input-source"
 import { createInlineController, inlineKeyFor, trimInlineSteps } from "./vim/inline"
 import type { InlineTailTrim } from "./vim/inline"
+import { createWhichKeyPanel } from "./vim/which-key"
 
 export default Plugin.define({
   id: "opencode-vim",
@@ -68,6 +69,28 @@ function VimHost(props: { context: Context }) {
     notify: (message) => props.context.ui.toast.show({ message, variant: "warning" }),
   })
   const inline = createInlineController(config.inline)
+  const whichKey = createWhichKeyPanel({
+    config,
+    enabled,
+    renderer: props.context.renderer,
+    theme: {
+      surface: props.context.theme.background.raised.high,
+      border: props.context.theme.border.base,
+      text: props.context.theme.text.base,
+      muted: props.context.theme.text.muted,
+      selected: {
+        background: props.context.theme.background.action.primary.focused,
+        foreground: props.context.theme.text.action.primary.focused,
+      },
+    },
+    pending: () => {
+      const kind = inputKind(props.context)
+      const vim = kind === "dialog" ? dialogVim : kind === "prompt" ? promptVim : undefined
+      return vim?.vimee.pendingKeybind()
+    },
+    commandTitle: (id) => props.context.keymap.commands().find((command) => command.id === id)?.title,
+  })
+  const unsubscribeVim = [state, dialogState].map((vimState) => vimState.subscribe(() => props.context.renderer.requestRender()))
   let pendingKeys: Array<KeyEvent | PasteEvent> | undefined
   let disposed = false
 
@@ -148,6 +171,23 @@ function VimHost(props: { context: Context }) {
     if (!key) return
     const mapped = normalMappings.some((sequence) => sequence.startsWith(key))
 
+    const intent = whichKey.owns(key, mapped)
+    if (intent === "up" || intent === "down") {
+      event.preventDefault()
+      event.stopPropagation()
+      whichKey.move(intent === "down" ? 1 : -1)
+      return
+    }
+    if (intent === "run") {
+      const target = whichKey.selection()
+      if (target) {
+        event.preventDefault()
+        event.stopPropagation()
+        if (runVimeeResult(vimee.executeKeybind(target.sequence, editorContext))) syncCursor(true)
+        return
+      }
+    }
+
     if (kind === "prompt") {
       const modified = event.shift || event.ctrl || event.option || event.meta || event.super
       // The prompt completion owns Enter while it is showing; let it select the
@@ -205,31 +245,7 @@ function VimHost(props: { context: Context }) {
     const before = state.mode()
     let consumed = false
     try {
-      const result = vimee.handle(event, key, editorContext)
-      if (typeof result === "boolean") consumed = result
-      else {
-        consumed = true
-        const queued: Array<KeyEvent | PasteEvent> = []
-        pendingKeys = queued
-        const input = props.context.renderer.currentFocusedEditor
-        void result
-          .then((handled) => {
-            if (pendingKeys !== queued) return
-            pendingKeys = undefined
-            if (!handled) return
-            syncCursor(true)
-            // Replay through the host too: a queued i may be followed by native typing.
-            for (const event of queued) {
-              if (!enabled() || props.context.renderer.currentFocusedEditor !== input) break
-              if (event instanceof PasteEvent) props.context.renderer.keyInput.emit("paste", event)
-              else props.context.renderer.keyInput.emit("keypress", event)
-            }
-          })
-          .catch((error) => {
-            if (pendingKeys === queued) pendingKeys = undefined
-            log("vim.clipboard.paste.error", { error: String(error) })
-          })
-      }
+      consumed = runVimeeResult(vimee.handle(event, key, editorContext))
     } finally {
       if (consumed || state.mode() !== before) {
         event.preventDefault()
@@ -237,6 +253,35 @@ function VimHost(props: { context: Context }) {
       }
     }
     if (consumed) syncCursor(true)
+  }
+
+  /**
+   * Applies a Vim result and, for async chains, queues the following keys until
+   * it settles so native typing cannot interleave with an agent switch.
+   */
+  function runVimeeResult(result: boolean | Promise<boolean>) {
+    if (typeof result === "boolean") return result
+    const queued: Array<KeyEvent | PasteEvent> = []
+    pendingKeys = queued
+    const input = props.context.renderer.currentFocusedEditor
+    void result
+      .then((handled) => {
+        if (pendingKeys !== queued) return
+        pendingKeys = undefined
+        if (!handled) return
+        syncCursor(true)
+        // Replay through the host too: a queued i may be followed by native typing.
+        for (const event of queued) {
+          if (!enabled() || props.context.renderer.currentFocusedEditor !== input) break
+          if (event instanceof PasteEvent) props.context.renderer.keyInput.emit("paste", event)
+          else props.context.renderer.keyInput.emit("keypress", event)
+        }
+      })
+      .catch((error) => {
+        if (pendingKeys === queued) pendingKeys = undefined
+        log("vim.clipboard.paste.error", { error: String(error) })
+      })
+    return true
   }
 
   // Focus events can fire inside the host's prompt effects. Do not subscribe
@@ -293,6 +338,8 @@ function VimHost(props: { context: Context }) {
     removeStatus()
     session.close()
     inline.close()
+    whichKey.dispose()
+    for (const unsubscribe of unsubscribeVim) unsubscribe()
     props.context.renderer.keyInput.off("keypress", onKey)
     props.context.renderer.keyInput.off("paste", onPaste)
     props.context.renderer.off("focused_editor", onFocus)

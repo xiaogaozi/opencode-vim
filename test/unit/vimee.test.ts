@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { RGBA, type KeyEvent } from "@opentui/core"
 import type { EditorContext } from "../../src/vim/editor"
-import { createVimConfig } from "../../src/vim/config"
+import { createVimConfig, type VimOptions } from "../../src/vim/config"
 import type { VimLog } from "../../src/vim/log"
 import { createVimState, type VimMode } from "../../src/vim/state"
 import { displayToChar, displayWidth } from "../../src/vim/map"
@@ -106,6 +106,88 @@ describe("vim prompt history", () => {
     expect(fixture.handle("g")).toBe(true)
     expect(fixture.handle("k")).toBe(true)
     expect(fixture.commands).toEqual(["test.run"])
+  })
+})
+
+describe("vim which-key pending keybinds", () => {
+  test("tracks and clears a pending normal-mode prefix", () => {
+    const fixture = createFixture("normal", "insert", "", () => {}, "<C-g>n")
+
+    expect(fixture.handle("g", true)).toBe(true)
+    expect(fixture.pendingKeybind()).toEqual({ mode: "normal", tokens: ["<C-g>"] })
+    expect(fixture.handle("n")).toBe(true)
+    expect(fixture.pendingKeybind()).toBeUndefined()
+    expect(fixture.state.mode()).toBe("insert")
+  })
+
+  test("tracks an insert-mode prefix", () => {
+    const fixture = createFixture("insert", "normal", "", () => {}, "kj")
+
+    expect(fixture.handle("k")).toBe(true)
+    expect(fixture.pendingKeybind()).toEqual({ mode: "insert", tokens: ["k"] })
+    expect(fixture.handle("j")).toBe(true)
+    expect(fixture.pendingKeybind()).toBeUndefined()
+    expect(fixture.state.mode()).toBe("normal")
+  })
+
+  test("holds the prefix past keymapTimeout when which-key is enabled", async () => {
+    const fixture = createFixture("normal", "insert", "", () => {}, "<C-g>n", undefined, undefined, {
+      whichKey: { enabled: true },
+      keymapTimeout: 10,
+    })
+
+    expect(fixture.handle("g", true)).toBe(true)
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    expect(fixture.pendingKeybind()).toEqual({ mode: "normal", tokens: ["<C-g>"] })
+    expect(fixture.handle("n")).toBe(true)
+    expect(fixture.state.mode()).toBe("insert")
+  })
+
+  test("keeps the keymapTimeout when which-key is disabled", async () => {
+    const fixture = createFixture("normal", "insert", "", () => {}, "<C-g>n", undefined, undefined, {
+      keymapTimeout: 10,
+    })
+
+    expect(fixture.handle("g", true)).toBe(true)
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    expect(fixture.pendingKeybind()).toBeUndefined()
+  })
+
+  test("falls through an unmatched key after a held insert prefix", () => {
+    const fixture = createFixture("insert", "normal", "abc", () => {}, "kj", undefined, undefined, {
+      whichKey: { enabled: true },
+    })
+
+    expect(fixture.handle("k")).toBe(true)
+    expect(fixture.handle("z")).toBe(false)
+    expect(fixture.input.plainText).toBe("kabc")
+    expect(fixture.pendingKeybind()).toBeUndefined()
+  })
+
+  test("executes a selected mapping by its full sequence", () => {
+    const fixture = createFixture("normal", ["insert", "text:go", "submit"], "", () => {}, "<C-g>n")
+
+    expect(fixture.handle("g", true)).toBe(true)
+    expect(fixture.execute("<C-g>n")).toBe(true)
+    expect(fixture.pendingKeybind()).toBeUndefined()
+    expect(fixture.input.plainText).toBe("go")
+    expect(fixture.submissions).toHaveLength(1)
+    expect(fixture.state.mode()).toBe("insert")
+  })
+
+  test("discards a held insert prefix instead of inserting it", () => {
+    const fixture = createFixture("insert", "normal", "abc", () => {}, "kj")
+
+    expect(fixture.handle("k")).toBe(true)
+    expect(fixture.execute("kj")).toBe(true)
+    expect(fixture.input.plainText).toBe("abc")
+    expect(fixture.state.mode()).toBe("normal")
+  })
+
+  test("rejects a sequence that is not configured", () => {
+    const fixture = createFixture("normal", "insert")
+
+    expect(fixture.execute("zz")).toBe(false)
   })
 })
 
@@ -286,6 +368,7 @@ function createFixture(
   mappedKey = "Q",
   switchAgent?: (name: string) => boolean | Promise<boolean>,
   sendPrompt?: (agent: string | undefined, options?: { agentSwitched?: boolean }) => boolean | Promise<boolean>,
+  options: VimOptions = {},
 ) {
   const input: {
     plainText: string
@@ -313,6 +396,8 @@ function createFixture(
     agents,
     events,
     state: createVimState(mode),
+    pendingKeybind: () => adapter.pendingKeybind(),
+    execute: (sequence: string) => adapter.executeKeybind(sequence, ctx),
     handle(key = mappedKey, ctrl = false) {
       return adapter.handle({ name: key, ctrl } as KeyEvent, ctrl ? `<C-${key}>` : key, ctx)
     },
@@ -347,6 +432,7 @@ function createFixture(
   const config = createVimConfig({
     defaultMode: mode,
     keymaps: action ? { [mode]: { [mappedKey]: action } } : undefined,
+    ...options,
   })
   const adapter = createVimeeAdapter(fixture.state, config, log)
   return fixture
