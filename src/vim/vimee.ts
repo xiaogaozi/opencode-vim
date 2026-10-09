@@ -2,6 +2,7 @@ import type { KeyEvent, WidthMethod } from "@opentui/core"
 import {
   TextBuffer,
   createInitialContext,
+  normalizeKey,
   parseKeySequence,
   processKeystroke,
   resetContext,
@@ -35,7 +36,7 @@ import {
   vimOffsetFromPosition,
   type PromptMap,
 } from "./map"
-import type { createVimState } from "./state"
+import type { createVimState, VimMode } from "./state"
 import {
   executeTextObject,
   orderedRange,
@@ -75,6 +76,7 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
   let yankTimer: ReturnType<typeof setTimeout> | undefined
   let yankFlashActive = false
   let pendingInsert = ""
+  let pendingKeybind: { mode: VimMode; tokens: string[] } | undefined
   let pendingTarget: { input: EditorInput; offset: number } | undefined
   let pendingContext: EditorContext | undefined
   let nativeInsertChanged = false
@@ -92,13 +94,15 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
     j: !hasNormalKeyPrefix(config, "j"),
   }
 
-  return {
+  const adapter = {
     attach,
     suspend,
     setRegister(text: string) {
       vim = { ...vim, register: codec.encode(text) }
     },
     isPending: () => vim.phase !== "idle" || vim.count > 0 || !!keybinds?.isPending(),
+    /** Pending custom-keymap prefix, for the which-key popup. */
+    pendingKeybind: () => pendingKeybind,
     handle(event: KeyEvent, key: string, ctx: EditorContext): boolean | Promise<boolean> {
       const input = ctx.input()
       if (!input) return false
@@ -158,6 +162,10 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
       const textObjectHandled = handleTextObject(vimeeKey, ctx, map)
       if (textObjectHandled !== undefined) return textObjectHandled
       const resolved = keybinds?.resolve(vimeeKey, vim.mode, event.ctrl)
+      pendingKeybind =
+        resolved?.status === "pending"
+          ? { mode: state.mode(), tokens: [...(pendingKeybind?.tokens ?? []), normalizeKey(vimeeKey, event.ctrl)] }
+          : undefined
       if (resolved?.status === "pending") {
         vim = { ...vim, statusMessage: resolved.display }
         state.setPending(resolved.display)
@@ -245,6 +253,23 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
         }
       }
     },
+    /**
+     * Runs a configured mapping by its full key sequence, as picked in the
+     * which-key popup. Replaying the keys through `handle` reuses the mapping,
+     * chain and clipboard paths; a held insert prefix is discarded instead of
+     * being inserted, because the user is running the mapping, not typing.
+     */
+    executeKeybind(sequence: string, ctx: EditorContext): boolean | Promise<boolean> {
+      if (!config.keymaps[state.mode()]?.[sequence]) return false
+      discardKeybindPending()
+      let result: boolean | Promise<boolean> = false
+      for (const token of parseKeySequence(sequence)) {
+        result = adapter.handle(keyEventForToken(token), token, ctx)
+        if (result instanceof Promise) return result
+        if (!result) return false
+      }
+      return result
+    },
     cleanup() {
       suspend()
       for (const item of histories.values()) item.cleanup()
@@ -253,6 +278,7 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
       activeInput = undefined
     },
   }
+  return adapter
 
   function needsClipboard(key: string, ctrl: boolean, definition?: KeybindDefinition) {
     if (definition) {
@@ -300,6 +326,7 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
     if (timer) clearTimeout(timer)
     timer = undefined
     keybinds?.cancel()
+    pendingKeybind = undefined
     cancelYankFlash()
     if (activeInput && !activeInput.isDestroyed) clearVisualSelection(activeInput)
     if (isVisualMode(state.mode())) state.setMode("normal")
@@ -464,7 +491,7 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
       // submit path and its client-side agent selection, so send through the
       // session API when the host supports it.
       if (ctx.sendPrompt) {
-        const sent = ctx.sendPrompt(chain.agent)
+        const sent = ctx.sendPrompt(chain.agent, { agentSwitched: chain.agent !== undefined })
         if (sent instanceof Promise) {
           return sent.then((ok) => {
             if (ok) return true
@@ -566,6 +593,10 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
     const wasPending = keybinds.isPending()
     const pendingBefore = pendingInsert
     const resolved = keybinds.resolve(key, "insert", event.ctrl)
+    pendingKeybind =
+      resolved.status === "pending"
+        ? { mode: "insert", tokens: [...(pendingKeybind?.tokens ?? []), normalizeKey(key, event.ctrl)] }
+        : undefined
 
     switch (resolved.status) {
       case "pending":
@@ -975,8 +1006,11 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
     if (timer) clearTimeout(timer)
     timer = undefined
     if (!keybinds?.isPending()) return
+    // The which-key popup stays open until the user presses a key.
+    if (config.whichKey.enabled) return
     timer = setTimeout(() => {
       keybinds.cancel()
+      pendingKeybind = undefined
       flushPendingInsert(ctx, pendingInsert)
       pendingInsert = ""
       state.setPending("")
@@ -989,7 +1023,20 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
     if (timer) clearTimeout(timer)
     timer = undefined
     keybinds.cancel()
+    pendingKeybind = undefined
     if (flush) flushPendingInsert(ctx, pendingInsert, offset)
+    pendingInsert = ""
+    pendingTarget = undefined
+    pendingContext = undefined
+    state.setPending("")
+  }
+
+  /** Drops a pending custom keybind without inserting its held characters. */
+  function discardKeybindPending() {
+    if (timer) clearTimeout(timer)
+    timer = undefined
+    keybinds?.cancel()
+    pendingKeybind = undefined
     pendingInsert = ""
     pendingTarget = undefined
     pendingContext = undefined
@@ -1100,6 +1147,12 @@ function readOnlyKey(key: string, ctrl: boolean, vim: VimContext) {
     /^[0-9hjklwWbBeE$^gGfFtT;,vVy%{}()"]$/.test(key) ||
     ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(key)
   )
+}
+
+/** A synthetic key event for replaying one configured key token. */
+function keyEventForToken(token: string): KeyEvent {
+  if (token.startsWith("<C-") && token.endsWith(">")) return { name: token.slice(3, -1), ctrl: true } as KeyEvent
+  return { name: token } as KeyEvent
 }
 
 function wordOperatorRange(range: MotionRange, buffer: TextBuffer): MotionRange {
