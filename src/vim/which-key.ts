@@ -71,7 +71,10 @@ function compareOptions(a: WhichKeyOption, b: WhichKeyOption) {
 }
 
 /** Explicit description when configured, an inferred label otherwise. */
-export function describeMappedAction(action: VimMappedAction, commandTitle?: (id: string) => string | undefined): string {
+export function describeMappedAction(
+  action: VimMappedAction,
+  commandTitle?: (id: string) => string | undefined,
+): string {
   const explicit = mappedActionDescription(action)
   if (explicit) return cleanText(explicit)
 

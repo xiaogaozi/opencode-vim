@@ -90,7 +90,9 @@ function VimHost(props: { context: Context }) {
     },
     commandTitle: (id) => props.context.keymap.commands().find((command) => command.id === id)?.title,
   })
-  const unsubscribeVim = [state, dialogState].map((vimState) => vimState.subscribe(() => props.context.renderer.requestRender()))
+  const unsubscribeVim = [state, dialogState].map((vimState) =>
+    vimState.subscribe(() => props.context.renderer.requestRender()),
+  )
   let pendingKeys: Array<KeyEvent | PasteEvent> | undefined
   let disposed = false
 
