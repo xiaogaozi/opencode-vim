@@ -54,6 +54,10 @@ export async function composerNavigation({ terminal, request, sessionID, workspa
   await screen("previous-subagent", (_text, ansi) => row(ansi, "Composer child one") === secondUnselected)
   await keys("Down")
   await screen("native-down", (_text, ansi) => row(ansi, "Composer child one") === secondSelected)
+  // Leave the show-all toggle in its default state; 2.0.26 keeps it across
+  // opens and the later steps expect the active view.
+  await keys("C-a")
+  await screen("active-restored", (text) => text.includes("No active subagents"))
   await keys("Escape")
   await screen(
     "prompt-restored",

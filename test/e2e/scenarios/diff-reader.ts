@@ -20,7 +20,9 @@ export function diffReader(initial: DiffView = "after", remapped = false) {
     })
     if (grouped) {
       await keys("Enter")
-      await screen("expanded", (text) => text.includes("Edit edited-two.ts"))
+      // The last children can sit below the fold; the reader flow below
+      // scrolls to them, so only assert that the expansion rendered its rows.
+      await screen("expanded", (text) => text.includes("Edit edited-one.ts"))
       await type("j")
     }
     await keys("Enter")

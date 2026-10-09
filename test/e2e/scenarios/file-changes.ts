@@ -42,7 +42,9 @@ export async function fileChanges({ terminal }: Fixture) {
   })
   if (grouped) {
     await keys("Enter")
-    await screen("changes-expanded", (text) => text.includes("Edit edited-two.ts"))
+    // The last children can sit below the fold; the per-file loop below
+    // scrolls to them, so only assert that the expansion rendered its rows.
+    await screen("changes-expanded", (text) => text.includes("Edit edited-one.ts"))
     await type("j")
   }
   for (const [index, name] of names.entries()) {
