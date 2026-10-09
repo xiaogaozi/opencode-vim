@@ -168,7 +168,8 @@ function VimHost(props: { context: Context }) {
         if (action.kind === "enter") {
           inputSource.setSource("normal")
         } else {
-          if (action.trimHead || action.trimTail !== "none") trimInlineSpaces(action.anchor, action.trimHead, action.trimTail)
+          if (action.trimHead || action.trimTail !== "none")
+            trimInlineSpaces(action.anchor, action.trimHead, action.trimTail)
           inputSource.setSource("other")
         }
         syncCursor(true)

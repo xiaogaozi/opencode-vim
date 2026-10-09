@@ -13,7 +13,15 @@ import type { VimConfig } from "./config"
 import type { VimLog } from "./log"
 import { createNativeHistory, type NativeHistory } from "./history"
 import { createGraphemeCodec } from "./graphemes"
-import { createKeybinds, chainSequence, chainSteps, hasNormalKeyPrefix, insertHostAction, sequenceNeedsClipboard, type HostKeybindDefinition } from "./keymaps"
+import {
+  createKeybinds,
+  chainSequence,
+  chainSteps,
+  hasNormalKeyPrefix,
+  insertHostAction,
+  sequenceNeedsClipboard,
+  type HostKeybindDefinition,
+} from "./keymaps"
 import { keyForVimee, keyToken, tokenCtrl } from "./keys"
 import {
   displayToChar,
@@ -577,7 +585,13 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
           state.setPending("")
           updateTimeout(ctx)
           return runChain(steps, ctx, (actions) => {
-            log("vimee.keybind", { key, mode: vim.mode, phase: vim.phase, cursor: vim.cursor, actions: actions.map((action) => action.type) })
+            log("vimee.keybind", {
+              key,
+              mode: vim.mode,
+              phase: vim.phase,
+              cursor: vim.cursor,
+              actions: actions.map((action) => action.type),
+            })
             return true
           })
         }
