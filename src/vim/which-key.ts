@@ -167,7 +167,7 @@ export function createWhichKeyPanel(input: WhichKeyPanelInput) {
       selected = 0
     }
     // Only the rows the popup can display are selectable.
-    selected = Math.max(0, Math.min(selected, visibleCount(input, options.length) - 1))
+    selected = Math.max(0, Math.min(selected, popupLayout(input, options.length).visible - 1))
     return { pending, options }
   }
 
@@ -188,7 +188,7 @@ export function createWhichKeyPanel(input: WhichKeyPanelInput) {
     move(delta: number) {
       const state = current()
       if (!state) return false
-      const max = visibleCount(input, state.options.length) - 1
+      const max = popupLayout(input, state.options.length).visible - 1
       const next = Math.max(0, Math.min(selected + delta, max))
       if (next === selected) return false
       selected = next
@@ -208,8 +208,11 @@ export function createWhichKeyPanel(input: WhichKeyPanelInput) {
   }
 }
 
-function visibleCount(input: WhichKeyPanelInput, count: number) {
-  return Math.max(1, Math.min(count, MAX_ROWS, input.renderer.height - 1))
+/** Option rows to show, reserving the separator and hint rows. */
+function popupLayout(input: WhichKeyPanelInput, count: number) {
+  const budget = Math.max(1, Math.min(MAX_ROWS, input.renderer.height - 2))
+  if (count <= budget) return { visible: count, more: false }
+  return { visible: Math.max(1, budget - 1), more: true }
 }
 
 function render(
@@ -226,10 +229,9 @@ function render(
   const textX = left + 3
   const textWidth = Math.max(0, width - (textX - left) - 2)
   const keyWidth = Math.max(...options.map((option) => displayWidth(option.keys, method)))
-  const visible = visibleCount(input, options.length)
-  const more = options.length > visible
+  const { visible, more } = popupLayout(input, options.length)
   const contentRows = visible + (more ? 1 : 0)
-  const height = contentRows + 1
+  const height = contentRows + 2
   const top = clamp(anchor.y - height, 0, Math.max(0, buffer.height - height))
   const colors = input.theme
 
@@ -255,8 +257,9 @@ function render(
     }
   }
 
+  // A blank row separates the candidates from the key hints below them.
   const hint = truncateToWidth(`${pending.tokens.join("")} · ${SELECT_HINT}`, textWidth, method)
-  buffer.drawText(hint, textX, top + contentRows, colors.muted, colors.surface)
+  buffer.drawText(hint, textX, top + contentRows + 1, colors.muted, colors.surface)
 }
 
 function drawOption(

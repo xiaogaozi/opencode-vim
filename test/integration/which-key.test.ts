@@ -57,6 +57,11 @@ describe("which-key popup", () => {
     expect(frame).toContain("second")
     // The prefix and the key hints share the last row, like the host popup's surface.
     expect(frame).toContain("<C-g> · ↑↓/<C-n>/<C-p> 选择 · Enter 执行 · Esc 取消")
+    // A blank row separates the candidates from the key hints.
+    const rows = frame.split("\n")
+    const hintRow = rows.findIndex((row) => row.includes("Enter 执行"))
+    expect(hintRow).toBeGreaterThan(0)
+    expect(rows[hintRow - 1].replaceAll("┃", "").trim()).toBe("")
     expect(panel.visible()).toBe(true)
 
     await fixture.keys("n")
@@ -148,10 +153,10 @@ describe("which-key popup", () => {
 
     fixture.mockInput.pressKey("g", { ctrl: true })
     await fixture.renderOnce()
-    expect(fixture.captureCharFrame()).toContain("… +4 more")
+    expect(fixture.captureCharFrame()).toContain("… +5 more")
 
     for (let index = 0; index < 20; index++) panel.move(1)
-    expect(panel.selection()?.sequence).toBe("<C-g>k9")
+    expect(panel.selection()?.sequence).toBe("<C-g>k8")
 
     panel.dispose()
   })
