@@ -7,6 +7,7 @@ import {
   type VimAction,
 } from "@vimee/core"
 import type { VimConfig, VimMappedAction } from "./config"
+import { mappedActionValue } from "./config"
 import { keyToken } from "./keys"
 import type { VimLog } from "./log"
 
@@ -70,8 +71,9 @@ export function mappedCommand(action: string): string | undefined {
 }
 
 function keybindAction(action: VimMappedAction): HostKeybindDefinition {
-  if (typeof action !== "string") return chainAction(action)
-  const command = mappedCommand(action)
+  const value = mappedActionValue(action)
+  if (typeof value !== "string") return chainAction(value)
+  const command = mappedCommand(value)
   if (command) {
     return {
       execute: () => [{ type: "command", command } as unknown as VimAction],
@@ -79,7 +81,7 @@ function keybindAction(action: VimMappedAction): HostKeybindDefinition {
       command,
     }
   }
-  switch (action) {
+  switch (value) {
     case "normal":
       return { keys: "<Esc>", hostAction: "normal" }
     case "insert":
@@ -87,8 +89,8 @@ function keybindAction(action: VimMappedAction): HostKeybindDefinition {
     case "submit":
       return { execute: () => [{ type: "submit" } as unknown as VimAction], hostAction: "submit" }
     default:
-      if (action.startsWith("agent:") || action.startsWith("text:")) return chainAction([action])
-      return { keys: action }
+      if (value.startsWith("agent:") || value.startsWith("text:")) return chainAction([value])
+      return { keys: value }
   }
 }
 

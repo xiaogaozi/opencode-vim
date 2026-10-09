@@ -11,8 +11,12 @@ export type EditorContext = {
   requestRender: () => void
   /** Switches the host agent; resolves false when no session can switch. */
   switchAgent?: (name: string) => boolean | Promise<boolean>
-  /** Sends the prompt text to the session, bypassing the host's own submit path. */
-  sendPrompt?: (agent: string | undefined) => boolean | Promise<boolean>
+  /**
+   * Sends the prompt text to the session, bypassing the host's own submit
+   * path. `agentSwitched` tells the host a chain's `agent:` step already
+   * switched, so it must not switch again.
+   */
+  sendPrompt?: (agent: string | undefined, options?: { agentSwitched?: boolean }) => boolean | Promise<boolean>
 }
 
 export type EditorInput = {

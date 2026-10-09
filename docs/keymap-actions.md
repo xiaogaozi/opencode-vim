@@ -106,6 +106,27 @@ Chains run in the triggered mode. Enter another mode first (`["normal", "dw"]`)
 before a Vim key sequence step, because a Vim key sequence inside insert mode is
 rejected and aborts the chain. `submit` clears the prompt, so place it last.
 
+## Descriptions
+
+A mapping value can also be an object with `action` and an optional
+`description`, shown by the [`whichKey`](./configuration.md#which-key) popup:
+
+```json
+{
+  "keymaps": {
+    "normal": {
+      "<C-g>cp": {
+        "description": "commit & push",
+        "action": ["insert", "text:/commit-and-push", "agent:build", "submit"]
+      }
+    }
+  }
+}
+```
+
+Without a description, the popup infers one from the action: a chain's `text:`
+payload, a `command:` title, the joined steps, or the Vim key sequence itself.
+
 ## Key notation
 
 Use printable ASCII characters; uppercase letters represent shifted keys. Use
