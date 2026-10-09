@@ -12,7 +12,9 @@ export async function installOpenCode() {
   // Reuse an installed binary for offline runs: VIM_E2E_OPENCODE=/path/to/opencode.
   const configured = process.env.VIM_E2E_OPENCODE
   if (configured) {
-    const version = execFileSync(configured, ["--version"], { encoding: "utf8" }).trim().replace(/^opencode v/, "")
+    const version = execFileSync(configured, ["--version"], { encoding: "utf8" })
+      .trim()
+      .replace(/^opencode v/, "")
     if (!/^2\.\d+\.\d+$/.test(version)) throw new Error(`Expected a stable OpenCode V2 binary, received ${version}`)
     console.log(`OpenCode E2E version: ${version} (${configured})`)
     return { binary: configured, version }

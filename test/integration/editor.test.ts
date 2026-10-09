@@ -403,12 +403,17 @@ describe("real textarea Vim editing", () => {
 
   test("runs an action chain with an agent switch and submit", async () => {
     const events: string[] = []
-    fixture = await createFixture("", { keymaps: { normal: { Q: ["insert", "text:你好 world", "agent:build", "submit"] } } }, 80, {
-      switchAgent: (name) => {
-        events.push(`agent:${name}`)
-        return true
+    fixture = await createFixture(
+      "",
+      { keymaps: { normal: { Q: ["insert", "text:你好 world", "agent:build", "submit"] } } },
+      80,
+      {
+        switchAgent: (name) => {
+          events.push(`agent:${name}`)
+          return true
+        },
       },
-    })
+    )
 
     await fixture.keys("Q")
     expect(fixture.input.plainText).toBe("你好 world")

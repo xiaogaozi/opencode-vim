@@ -168,13 +168,13 @@ test("a mapping can yank and put without pasting stale clipboard text", async ()
 })
 
 test("an action chain reads the clipboard for its put step", async () => {
-    const f = await mount({ keymaps: { normal: { Q: ["text:hi", "0", "p"] } } })
-    f.input.setText("")
-    f.input.cursorOffset = 0
-    f.clipboard.text = "chain"
-    await f.keys("Q")
-    expect(f.input.plainText).toBe("hchaini")
-    expect(f.clipboard.host.read).toHaveBeenCalled()
+  const f = await mount({ keymaps: { normal: { Q: ["text:hi", "0", "p"] } } })
+  f.input.setText("")
+  f.input.cursorOffset = 0
+  f.clipboard.text = "chain"
+  await f.keys("Q")
+  expect(f.input.plainText).toBe("hchaini")
+  expect(f.clipboard.host.read).toHaveBeenCalled()
 })
 
 test("named yanks and puts stay separate from the clipboard", async () => {
