@@ -31,6 +31,10 @@ export type VimInputSource = {
   indicator: boolean
 }
 
+export type VimWhichKey = {
+  enabled: boolean
+}
+
 export type VimConfig = {
   defaultMode: VimMode
   diffView: DiffView
@@ -39,6 +43,7 @@ export type VimConfig = {
   cursorStyles: Record<VimMode, VimCursorStyle>
   inputSource: VimInputSource
   inline: VimInline
+  whichKey: VimWhichKey
   debug: boolean
   debugPath?: string
   keymaps: VimKeymaps
@@ -52,6 +57,7 @@ export type VimOptions = {
   cursorStyles?: Partial<Record<VimMode, VimCursorStyle>>
   inputSource?: VimInputSource
   inline?: VimInline
+  whichKey?: VimWhichKey
   debug?: boolean
   debugPath?: string
   keymaps?: VimKeymaps
@@ -63,8 +69,14 @@ export type VimKeymaps = Partial<Record<VimMode, Record<string, VimMappedAction>
   session?: Record<string, SessionAction>
   panes?: Record<string, VimMappedAction>
 }
-/** A single action, or a chain of steps run in order by one mapping. */
-export type VimMappedAction = string | readonly string[]
+/** A single action, a chain of steps run in order by one mapping, or one of
+ *  those with a description for the which-key popup. */
+export type VimMappedAction = string | readonly string[] | VimMappedActionObject
+
+export type VimMappedActionObject = {
+  readonly action: string | readonly string[]
+  readonly description?: string
+}
 
 const DEFAULT_CURSOR_STYLES: Record<VimMode, VimCursorStyle> = {
   insert: { style: "line", blinking: true },
@@ -74,6 +86,8 @@ const DEFAULT_CURSOR_STYLES: Record<VimMode, VimCursorStyle> = {
 }
 
 const DEFAULT_POLL_INTERVAL = 500
+
+const DEFAULT_WHICH_KEY: VimWhichKey = { enabled: false }
 
 export const DEFAULT_INPUT_SOURCE: VimInputSource = {
   enabled: false,
@@ -102,6 +116,7 @@ export function createVimConfig(options: unknown): VimConfig {
     },
     inputSource: input.inputSource ?? DEFAULT_INPUT_SOURCE,
     inline: input.inline ?? DEFAULT_INLINE,
+    whichKey: input.whichKey ?? DEFAULT_WHICH_KEY,
     debug: input.debug ?? process.env.VIM_PROMPT_DEBUG === "1",
     debugPath: input.debugPath,
     keymaps: input.keymaps ?? {},
@@ -125,6 +140,7 @@ function readOptions(options: unknown): VimOptions {
     cursorStyles: readCursorStyles(source.cursorStyles),
     inputSource: readInputSource(source.inputSource),
     inline: readInline(source.inline),
+    whichKey: readWhichKey(source.whichKey),
     debug: typeof source.debug === "boolean" ? source.debug : undefined,
     debugPath: typeof source.debugPath === "string" ? source.debugPath : undefined,
     keymaps: readKeymaps(source.keymaps),
@@ -225,6 +241,12 @@ function readInline(input: unknown): VimInline | undefined {
   }
 }
 
+function readWhichKey(input: unknown): VimWhichKey | undefined {
+  if (!input || typeof input !== "object") return undefined
+  const source = input as Record<string, unknown>
+  return { enabled: source.enabled === true }
+}
+
 function readString(input: unknown): string | undefined {
   if (typeof input !== "string") return undefined
   const value = input.trim()
@@ -261,10 +283,32 @@ function isMode(value: unknown): value is VimMode {
 }
 
 function readMappedAction(value: unknown): VimMappedAction | undefined {
+  if (typeof value === "string" || Array.isArray(value)) return readMappedActionValue(value)
+  if (!value || typeof value !== "object") return undefined
+  const source = value as Record<string, unknown>
+  const action = readMappedActionValue(source.action)
+  if (!action) return undefined
+  const description = readString(source.description)
+  return description ? { action, description } : { action }
+}
+
+function readMappedActionValue(value: unknown): string | readonly string[] | undefined {
   if (typeof value === "string") return value.length > 0 ? value : undefined
   if (!Array.isArray(value)) return undefined
   const steps = value.filter((step): step is string => typeof step === "string" && step.length > 0)
   return steps.length > 0 ? steps : undefined
+}
+
+export function mappedActionValue(action: VimMappedAction): string | readonly string[] {
+  return isMappedActionObject(action) ? action.action : action
+}
+
+export function mappedActionDescription(action: VimMappedAction): string | undefined {
+  return isMappedActionObject(action) ? action.description : undefined
+}
+
+function isMappedActionObject(action: VimMappedAction): action is VimMappedActionObject {
+  return typeof action === "object" && "action" in action
 }
 
 function readNumber(value: unknown) {

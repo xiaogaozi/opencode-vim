@@ -20,6 +20,7 @@ import { createTerminalControls } from "./ui/terminal"
 import { createInputSourceController } from "./vim/input-source"
 import { createInlineController, inlineKeyFor, trimInlineSteps } from "./vim/inline"
 import type { InlineTailTrim } from "./vim/inline"
+import { createWhichKeyPanel } from "./vim/which-key"
 
 export default Plugin.define({
   id: "opencode-vim",
@@ -68,6 +69,30 @@ function VimHost(props: { context: Context }) {
     notify: (message) => props.context.ui.toast.show({ message, variant: "warning" }),
   })
   const inline = createInlineController(config.inline)
+  const whichKey = createWhichKeyPanel({
+    config,
+    enabled,
+    renderer: props.context.renderer,
+    theme: {
+      surface: props.context.theme.background.raised.high,
+      border: props.context.theme.border.base,
+      text: props.context.theme.text.base,
+      muted: props.context.theme.text.muted,
+      selected: {
+        background: props.context.theme.background.action.primary.focused,
+        foreground: props.context.theme.text.action.primary.focused,
+      },
+    },
+    pending: () => {
+      const kind = inputKind(props.context)
+      const vim = kind === "dialog" ? dialogVim : kind === "prompt" ? promptVim : undefined
+      return vim?.vimee.pendingKeybind()
+    },
+    commandTitle: (id) => props.context.keymap.commands().find((command) => command.id === id)?.title,
+  })
+  const unsubscribeVim = [state, dialogState].map((vimState) =>
+    vimState.subscribe(() => props.context.renderer.requestRender()),
+  )
   let pendingKeys: Array<KeyEvent | PasteEvent> | undefined
   let disposed = false
 
@@ -148,6 +173,23 @@ function VimHost(props: { context: Context }) {
     if (!key) return
     const mapped = normalMappings.some((sequence) => sequence.startsWith(key))
 
+    const intent = whichKey.owns(key, mapped)
+    if (intent === "up" || intent === "down") {
+      event.preventDefault()
+      event.stopPropagation()
+      whichKey.move(intent === "down" ? 1 : -1)
+      return
+    }
+    if (intent === "run") {
+      const target = whichKey.selection()
+      if (target) {
+        event.preventDefault()
+        event.stopPropagation()
+        if (runVimeeResult(vimee.executeKeybind(target.sequence, editorContext))) syncCursor(true)
+        return
+      }
+    }
+
     if (kind === "prompt") {
       const modified = event.shift || event.ctrl || event.option || event.meta || event.super
       // The prompt completion owns Enter while it is showing; let it select the
@@ -205,31 +247,7 @@ function VimHost(props: { context: Context }) {
     const before = state.mode()
     let consumed = false
     try {
-      const result = vimee.handle(event, key, editorContext)
-      if (typeof result === "boolean") consumed = result
-      else {
-        consumed = true
-        const queued: Array<KeyEvent | PasteEvent> = []
-        pendingKeys = queued
-        const input = props.context.renderer.currentFocusedEditor
-        void result
-          .then((handled) => {
-            if (pendingKeys !== queued) return
-            pendingKeys = undefined
-            if (!handled) return
-            syncCursor(true)
-            // Replay through the host too: a queued i may be followed by native typing.
-            for (const event of queued) {
-              if (!enabled() || props.context.renderer.currentFocusedEditor !== input) break
-              if (event instanceof PasteEvent) props.context.renderer.keyInput.emit("paste", event)
-              else props.context.renderer.keyInput.emit("keypress", event)
-            }
-          })
-          .catch((error) => {
-            if (pendingKeys === queued) pendingKeys = undefined
-            log("vim.clipboard.paste.error", { error: String(error) })
-          })
-      }
+      consumed = runVimeeResult(vimee.handle(event, key, editorContext))
     } finally {
       if (consumed || state.mode() !== before) {
         event.preventDefault()
@@ -237,6 +255,35 @@ function VimHost(props: { context: Context }) {
       }
     }
     if (consumed) syncCursor(true)
+  }
+
+  /**
+   * Applies a Vim result and, for async chains, queues the following keys until
+   * it settles so native typing cannot interleave with an agent switch.
+   */
+  function runVimeeResult(result: boolean | Promise<boolean>) {
+    if (typeof result === "boolean") return result
+    const queued: Array<KeyEvent | PasteEvent> = []
+    pendingKeys = queued
+    const input = props.context.renderer.currentFocusedEditor
+    void result
+      .then((handled) => {
+        if (pendingKeys !== queued) return
+        pendingKeys = undefined
+        if (!handled) return
+        syncCursor(true)
+        // Replay through the host too: a queued i may be followed by native typing.
+        for (const event of queued) {
+          if (!enabled() || props.context.renderer.currentFocusedEditor !== input) break
+          if (event instanceof PasteEvent) props.context.renderer.keyInput.emit("paste", event)
+          else props.context.renderer.keyInput.emit("keypress", event)
+        }
+      })
+      .catch((error) => {
+        if (pendingKeys === queued) pendingKeys = undefined
+        log("vim.clipboard.paste.error", { error: String(error) })
+      })
+    return true
   }
 
   // Focus events can fire inside the host's prompt effects. Do not subscribe
@@ -293,6 +340,8 @@ function VimHost(props: { context: Context }) {
     removeStatus()
     session.close()
     inline.close()
+    whichKey.dispose()
+    for (const unsubscribe of unsubscribeVim) unsubscribe()
     props.context.renderer.keyInput.off("keypress", onKey)
     props.context.renderer.keyInput.off("paste", onPaste)
     props.context.renderer.off("focused_editor", onFocus)
@@ -458,7 +507,8 @@ function createEditorContext(context: Context, log: ReturnType<typeof createVimL
     },
     requestRender: () => context.renderer.requestRender(),
     switchAgent: (name: string) => switchAgent(context, name),
-    sendPrompt: (agent: string | undefined) => sendPrompt(context, agent, log),
+    sendPrompt: (agent: string | undefined, options?: { agentSwitched?: boolean }) =>
+      sendPrompt(context, agent, log, options),
   }
 }
 
@@ -484,11 +534,14 @@ const SUBMIT_RETRY_LIMIT = 10
  *
  * Prompts are submitted with the host's own client-side agent selection, so this
  * only records the switch; a chain that pinned an agent sends through the
- * session API instead (see `sendPrompt`).
+ * session API instead (see `sendPrompt`). Switching to the agent the session is
+ * already on is skipped, because OpenCode publishes an `agent-switched`
+ * transcript line for every call.
  */
 async function switchAgent(context: Context, name: string) {
   const route = context.ui.router.current()
   if (route.type !== "session") return false
+  if (context.data.session.get(route.sessionID)?.agent === name) return true
   try {
     await context.client.session.switchAgent({ sessionID: route.sessionID, agent: name })
     return true
@@ -498,7 +551,12 @@ async function switchAgent(context: Context, name: string) {
 }
 
 /** Sends a chain's prompt to the session, like the host does for slash commands. */
-async function sendPrompt(context: Context, agent: string | undefined, log: ReturnType<typeof createVimLog>) {
+async function sendPrompt(
+  context: Context,
+  agent: string | undefined,
+  log: ReturnType<typeof createVimLog>,
+  options: { agentSwitched?: boolean } = {},
+) {
   const route = context.ui.router.current()
   if (route.type !== "session") return false
   if (inputKind(context) !== "prompt") return false
@@ -506,7 +564,9 @@ async function sendPrompt(context: Context, agent: string | undefined, log: Retu
   const text = input?.plainText ?? ""
   if (!text.trim()) return false
   try {
-    if (agent) await context.client.session.switchAgent({ sessionID: route.sessionID, agent })
+    // A chain's `agent:` step already switched; switching again here would add
+    // a second `agent-switched` line to the transcript.
+    if (agent && !options.agentSwitched && !(await switchAgent(context, agent))) return false
     const slash = /^\/(\S+)\s*([\s\S]*)$/.exec(text)
     // Unknown slash text stays a prompt, matching the host's own submit path.
     if (slash && (await commandNames(context)).includes(slash[1])) {
