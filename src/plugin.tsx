@@ -18,7 +18,7 @@ import { createFormMode } from "./ui/form"
 import { handleComposerKey } from "./ui/composer"
 import { createTerminalControls } from "./ui/terminal"
 import { createInputSourceController } from "./vim/input-source"
-import { createInlineController, inlineKeyFor, trimInlineSteps } from "./vim/inline"
+import { createInlineController, inlineKeyFor, inlineRegionBlank, trimInlineSteps } from "./vim/inline"
 import type { InlineTailTrim } from "./vim/inline"
 import { createWhichKeyPanel } from "./vim/which-key"
 
@@ -416,7 +416,11 @@ function VimHost(props: { context: Context }) {
     const input = props.context.renderer.currentFocusedEditor
     if (!input) return
     const before = input.plainText ?? ""
-    const steps = trimInlineSteps(before, cursorIndex(), anchor, trimHead, trimTail)
+    const cursor = cursorIndex()
+    // A blank region (a space inserted into existing text) is left untouched,
+    // matching `emacs-smart-input-source`, so the space survives the close.
+    if (inlineRegionBlank(before, cursor, anchor)) return
+    const steps = trimInlineSteps(before, cursor, anchor, trimHead, trimTail)
     const last = steps[steps.length - 1]
     if (!last) return
 
