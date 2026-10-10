@@ -65,6 +65,28 @@ test("an Enter close keeps a reference extmark alive", async () => {
   }
 })
 
+test("the default close keeps the head space and the reference extmark", async () => {
+  const screen = await createTestRenderer({ width: 60, height: 8 })
+  try {
+    const input = new TextareaRenderable(screen.renderer, { id: "prompt", width: 40, height: 3, initialValue: "" })
+    screen.renderer.root.add(input)
+    const extmarks = input.extmarks
+    const typeId = extmarks.registerType("prompt-part")
+    const part = () => extmarks.getAllForTypeId(typeId).map((mark) => [mark.start, mark.end])
+
+    // Default close (`keepHeadSpace`): the head space stays, only the tail
+    // run collapses, and the reference extmark is untouched.
+    input.setText("X @xxx  ")
+    extmarks.create({ start: 2, end: 6, virtual: true, styleId: 1, typeId })
+    applyInlineTrim(input, "X @xxx  ", 8, 1, false, "excess", screen.renderer.widthMethod)
+
+    expect(input.plainText).toBe("X @xxx ")
+    expect(part()).toEqual([[2, 6]])
+  } finally {
+    screen.renderer.destroy()
+  }
+})
+
 test("the head trim shifts a reference that follows wide characters", async () => {
   const screen = await createTestRenderer({ width: 60, height: 8 })
   try {
