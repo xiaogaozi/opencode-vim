@@ -5,6 +5,10 @@ export type VimInline = {
   enabled: boolean
   timeoutMs: number
   enterCloses: boolean
+  /** Keep the space that opened the region when it closes. */
+  keepHeadSpace: boolean
+  /** Keep the space typed before the cursor when Enter closes the region. */
+  keepTailSpace: boolean
 }
 
 /** How the trailing whitespace run is trimmed when the region closes. */
@@ -39,6 +43,8 @@ export const DEFAULT_INLINE: VimInline = {
   enabled: false,
   timeoutMs: DEFAULT_INLINE_TIMEOUT_MS,
   enterCloses: true,
+  keepHeadSpace: true,
+  keepTailSpace: true,
 }
 
 /**
@@ -54,6 +60,8 @@ export function inlineKeyFor(key: string, bypassEnter: boolean): string {
  * Removes one space at the region head and/or one space before the cursor.
  * Returns the new text together with the cursor kept at its old position
  * relative to the end (edit primitives would otherwise move it to the edit).
+ * With `protect`, the trailing run stops before that character, so a kept
+ * head space survives a trailing trim.
  */
 export function trimInlineText(
   text: string,
@@ -61,6 +69,7 @@ export function trimInlineText(
   anchor: number | undefined,
   trimHead: boolean,
   trimTail: InlineTailTrim,
+  protect?: number,
 ): { text: string; cursor: number } {
   let next = text
   let nextCursor = cursor
@@ -68,7 +77,8 @@ export function trimInlineText(
   if (trimTail !== "none" && nextCursor > 0) {
     let run = 0
     while (run < nextCursor && next[nextCursor - 1 - run] === " ") run++
-    const remove = trimTail === "one" ? Math.min(run, 1) : Math.max(0, run - 1)
+    let remove = trimTail === "one" ? Math.min(run, 1) : Math.max(0, run - 1)
+    if (protect !== undefined) remove = Math.min(remove, Math.max(0, nextCursor - 1 - protect))
     if (remove > 0) {
       next = next.slice(0, nextCursor - remove) + next.slice(nextCursor)
       nextCursor -= remove
@@ -99,7 +109,9 @@ export function trimInlineSteps(
 ): InlineTrimStep[] {
   const steps: InlineTrimStep[] = []
 
-  const tail = trimInlineText(text, cursor, undefined, false, trimTail)
+  // A kept head space must survive the tail trim as well: a space inserted
+  // into existing text leaves the cursor right after the trigger space.
+  const tail = trimInlineText(text, cursor, undefined, false, trimTail, trimHead ? undefined : anchor)
   if (tail.text !== text) steps.push(tail)
 
   if (trimHead) {
@@ -113,8 +125,10 @@ export function trimInlineSteps(
 /**
  * Inline English region, following emacs-smart-input-source's inline mode: a
  * space typed while the other input source is active opens an English region
- * that two spaces or Enter close again. One head space and one tail space are
- * removed when the region closes.
+ * that two spaces or Enter close again. By default the head space and the
+ * tail space typed before a closing Enter survive the close, matching
+ * `sis-inline-tighten-head-rule`/`-tail-rule`'s `'one` default; set
+ * `keepHeadSpace`/`keepTailSpace` to `false` for the tight behavior.
  */
 export function createInlineController(config: VimInline): InlineController {
   const [active, setActive] = createSignal(false)
@@ -153,7 +167,13 @@ export function createInlineController(config: VimInline): InlineController {
 
       const exitAnchor = anchor
       close()
-      return { kind: "exit", consume: true, trimHead: true, trimTail: "excess", anchor: exitAnchor }
+      return {
+        kind: "exit",
+        consume: true,
+        trimHead: !config.keepHeadSpace,
+        trimTail: "excess",
+        anchor: exitAnchor,
+      }
     }
 
     lastSpace = undefined
@@ -161,7 +181,13 @@ export function createInlineController(config: VimInline): InlineController {
       const trims = config.enterCloses
       const exitAnchor = anchor
       close()
-      return { kind: "exit", consume: trims, trimHead: trims, trimTail: trims ? "one" : "none", anchor: exitAnchor }
+      return {
+        kind: "exit",
+        consume: trims,
+        trimHead: trims && !config.keepHeadSpace,
+        trimTail: trims ? (config.keepTailSpace ? "none" : "one") : "none",
+        anchor: exitAnchor,
+      }
     }
     return undefined
   }
