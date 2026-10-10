@@ -65,7 +65,7 @@ test("an Enter close keeps a reference extmark alive", async () => {
   }
 })
 
-test("the default close keeps the head space and the reference extmark", async () => {
+test("the keepHeadSpace close keeps the head space and the reference extmark", async () => {
   const screen = await createTestRenderer({ width: 60, height: 8 })
   try {
     const input = new TextareaRenderable(screen.renderer, { id: "prompt", width: 40, height: 3, initialValue: "" })
