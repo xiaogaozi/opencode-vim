@@ -1,12 +1,18 @@
 import { describe, expect, test } from "bun:test"
 import type { VimInline } from "../../src/vim/inline"
-import { createInlineController, inlineKeyFor, trimInlineSteps, trimInlineText } from "../../src/vim/inline"
+import {
+  DEFAULT_INLINE,
+  createInlineController,
+  inlineKeyFor,
+  trimInlineSteps,
+  trimInlineText,
+} from "../../src/vim/inline"
 
 function testConfig(overrides: Partial<VimInline> = {}): VimInline {
   return {
+    ...DEFAULT_INLINE,
     enabled: true,
     timeoutMs: 50,
-    enterCloses: true,
     ...overrides,
   }
 }
@@ -28,14 +34,14 @@ describe("inline English region", () => {
     expect(inline.active()).toBe(false)
   })
 
-  test("leaves the region on a double space with the head anchor", () => {
+  test("leaves the region on a double space and keeps the head space", () => {
     const inline = createInlineController(testConfig())
     inline.handleKey(space(4))
     expect(inline.handleKey(space(5))).toBeUndefined()
     expect(inline.handleKey(space(6))).toEqual({
       kind: "exit",
       consume: true,
-      trimHead: true,
+      trimHead: false,
       trimTail: "excess",
       anchor: 4,
     })
@@ -51,11 +57,62 @@ describe("inline English region", () => {
     expect(inline.active()).toBe(true)
   })
 
-  test("closes the region on Enter and trims both spaces", () => {
+  test("closes the region on Enter and keeps the tail space", () => {
     const inline = createInlineController(testConfig())
     inline.handleKey(space(4))
-    expect(inline.handleKey(enter)).toEqual({ kind: "exit", consume: true, trimHead: true, trimTail: "one", anchor: 4 })
+    expect(inline.handleKey(enter)).toEqual({
+      kind: "exit",
+      consume: true,
+      trimHead: false,
+      trimTail: "none",
+      anchor: 4,
+    })
     expect(inline.active()).toBe(false)
+  })
+
+  test("keepHeadSpace false restores the head trim", () => {
+    const double = createInlineController(testConfig({ keepHeadSpace: false }))
+    double.handleKey(space(4))
+    double.handleKey(space(5))
+    expect(double.handleKey(space(6))).toEqual({
+      kind: "exit",
+      consume: true,
+      trimHead: true,
+      trimTail: "excess",
+      anchor: 4,
+    })
+
+    const enterInline = createInlineController(testConfig({ keepHeadSpace: false }))
+    enterInline.handleKey(space(4))
+    expect(enterInline.handleKey(enter)).toEqual({
+      kind: "exit",
+      consume: true,
+      trimHead: true,
+      trimTail: "none",
+      anchor: 4,
+    })
+  })
+
+  test("keepTailSpace false restores the Enter tail trim", () => {
+    const inline = createInlineController(testConfig({ keepTailSpace: false }))
+    inline.handleKey(space(4))
+    expect(inline.handleKey(enter)).toEqual({
+      kind: "exit",
+      consume: true,
+      trimHead: false,
+      trimTail: "one",
+      anchor: 4,
+    })
+
+    const tight = createInlineController(testConfig({ keepHeadSpace: false, keepTailSpace: false }))
+    tight.handleKey(space(4))
+    expect(tight.handleKey(enter)).toEqual({
+      kind: "exit",
+      consume: true,
+      trimHead: true,
+      trimTail: "one",
+      anchor: 4,
+    })
   })
 
   test("lets Enter through when enterCloses is disabled", () => {
@@ -163,6 +220,97 @@ describe("inline trim steps", () => {
       { text: "X @xxx", cursor: 6 },
       { text: "X@xxx", cursor: 5 },
     ])
+  })
+
+  test("a kept head space survives the Enter tail trim", () => {
+    // "中文 123" with the cursor right after the inserted space: the Enter
+    // tail rule must not remove the kept head space.
+    expect(trimInlineSteps("中文 123", 3, 2, false, "one")).toEqual([])
+  })
+
+  test("an excess tail trim keeps the kept head space", () => {
+    expect(trimInlineSteps("中文  123", 4, 2, false, "excess")).toEqual([{ text: "中文 123", cursor: 3 }])
+  })
+
+  test("an excess close keeps the head space and collapses the completion tail", () => {
+    expect(trimInlineSteps("中文 @xxx  ", 9, 2, false, "excess")).toEqual([{ text: "中文 @xxx ", cursor: 8 }])
+  })
+})
+
+describe("inline close scenarios", () => {
+  // Plays a typed sequence through the controller like the host does: keys
+  // that are not consumed are inserted, the closing key applies the trims.
+  function play(config: VimInline, text: string, cursor: number, keys: string[]): string {
+    const inline = createInlineController(config)
+    for (const key of keys) {
+      const action = inline.handleKey({ key, mode: "insert", role: "other", cursor })
+      if (!action) {
+        if (key === "<Space>" || key.length === 1) {
+          text = text.slice(0, cursor) + (key === "<Space>" ? " " : key) + text.slice(cursor)
+          cursor++
+        }
+        continue
+      }
+      if (action.kind === "enter") {
+        text = text.slice(0, cursor) + " " + text.slice(cursor)
+        cursor++
+        continue
+      }
+      const steps = trimInlineSteps(text, cursor, action.anchor, action.trimHead, action.trimTail)
+      const last = steps[steps.length - 1]
+      if (last) {
+        text = last.text
+        cursor = last.cursor
+      }
+    }
+    return text
+  }
+
+  test("a double-space close keeps both sides", () => {
+    expect(play(testConfig(), "中文", 2, ["<Space>", "a", "b", "c", "<Space>", "<Space>"])).toBe("中文 abc ")
+  })
+
+  test("an Enter close keeps the head space", () => {
+    expect(play(testConfig(), "中文", 2, ["<Space>", "a", "b", "c", "<CR>"])).toBe("中文 abc")
+  })
+
+  test("an Enter close keeps the typed tail space", () => {
+    expect(play(testConfig(), "中文", 2, ["<Space>", "a", "b", "c", "<Space>", "<CR>"])).toBe("中文 abc ")
+  })
+
+  test("a space inserted into existing text stays", () => {
+    expect(play(testConfig(), "中文123", 2, ["<Space>", "<CR>"])).toBe("中文 123")
+  })
+
+  test("digits closed with Enter keep the head space", () => {
+    expect(play(testConfig(), "中文", 2, ["<Space>", "1", "2", "3", "<CR>"])).toBe("中文 123")
+  })
+
+  test("a blank region keeps the head space", () => {
+    expect(play(testConfig(), "中文", 2, ["<Space>", "<CR>"])).toBe("中文 ")
+  })
+
+  test("keepHeadSpace false removes the head space on a double-space close", () => {
+    expect(
+      play(testConfig({ keepHeadSpace: false }), "中文", 2, ["<Space>", "a", "b", "c", "<Space>", "<Space>"]),
+    ).toBe("中文abc ")
+  })
+
+  test("the tight settings remove both spaces on an Enter close", () => {
+    expect(
+      play(testConfig({ keepHeadSpace: false, keepTailSpace: false }), "中文", 2, [
+        "<Space>",
+        "a",
+        "b",
+        "c",
+        "<Space>",
+        "<CR>",
+      ]),
+    ).toBe("中文abc")
+  })
+
+  test("a kept head space survives the Enter tail trim while editing", () => {
+    expect(play(testConfig({ keepTailSpace: false }), "中文123", 2, ["<Space>", "<CR>"])).toBe("中文 123")
   })
 })
 

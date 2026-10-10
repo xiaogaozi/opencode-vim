@@ -245,11 +245,18 @@ It needs the input source switching above to be enabled:
   keep `Enter` submitting while the region is open.
 - While the prompt completion (`/` commands, `@` mentions) is open, `Enter`
   selects the highlighted item instead; the region stays open.
-- Closing removes one space of the head run (the space that opened the region).
-  `Enter` also removes one space before the cursor, while closing with two
-  spaces leaves at most one trailing space. For example `中文测试` + two spaces
-  + `abc` + one space + `Enter` + `，` produces `中文测试 abc，`, and `，` + one
-  space + `abc` + two spaces + `Enter` + `中文测试` produces `，abc 中文测试`.
+- Closing keeps the space that opened the region (`keepHeadSpace`, default
+  `true`) and, on `Enter`, the space typed before the cursor (`keepTailSpace`,
+  default `true`). This matches `emacs-smart-input-source`'s default
+  `sis-inline-tighten-head-rule`/`-tail-rule` (`'one`): `中文` + space + `123`
+  + `Enter` produces `中文 123`, and a space inserted into existing text
+  (`中文123` edited between `文` and `1`) stays as well.
+- Closing with two spaces leaves at most one trailing space, and a kept head
+  space survives that trim (the cursor can sit right after it).
+- Set `keepHeadSpace` or `keepTailSpace` to `false` to restore the tight
+  behavior: the head space is removed on close, and `Enter` also removes one
+  space before the cursor. With both `false`, `中文` + space + `abc` + space +
+  `Enter` produces `中文abc`.
 - The region also closes when insert mode is left or Vim mode is disabled.
 
 ### Debugging

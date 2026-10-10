@@ -238,6 +238,8 @@ function readInline(input: unknown): VimInline | undefined {
     enabled: source.enabled === true,
     timeoutMs: readNonNegative(source.timeoutMs) ?? DEFAULT_INLINE_TIMEOUT_MS,
     enterCloses: typeof source.enterCloses === "boolean" ? source.enterCloses : true,
+    keepHeadSpace: typeof source.keepHeadSpace === "boolean" ? source.keepHeadSpace : true,
+    keepTailSpace: typeof source.keepTailSpace === "boolean" ? source.keepTailSpace : true,
   }
 }
 
