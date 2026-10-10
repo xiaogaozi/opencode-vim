@@ -43,8 +43,8 @@ export const DEFAULT_INLINE: VimInline = {
   enabled: false,
   timeoutMs: DEFAULT_INLINE_TIMEOUT_MS,
   enterCloses: true,
-  keepHeadSpace: true,
-  keepTailSpace: true,
+  keepHeadSpace: false,
+  keepTailSpace: false,
 }
 
 /**
@@ -54,6 +54,19 @@ export const DEFAULT_INLINE: VimInline = {
  */
 export function inlineKeyFor(key: string, bypassEnter: boolean): string {
   return bypassEnter && key === "<CR>" ? "<CR-skip>" : key
+}
+
+/**
+ * True when the region between `anchor` and the cursor contains only spaces,
+ * e.g. a space inserted into existing text and closed right away.
+ * `emacs-smart-input-source` leaves blank regions untouched when they close,
+ * so the inserted space survives.
+ */
+export function inlineRegionBlank(text: string, cursor: number, anchor: number | undefined): boolean {
+  if (anchor === undefined) return false
+  const end = Math.min(Math.max(cursor, 0), text.length)
+  const start = Math.min(Math.max(anchor, 0), end)
+  return text.slice(start, end).trim() === ""
 }
 
 /**
@@ -125,10 +138,11 @@ export function trimInlineSteps(
 /**
  * Inline English region, following emacs-smart-input-source's inline mode: a
  * space typed while the other input source is active opens an English region
- * that two spaces or Enter close again. By default the head space and the
- * tail space typed before a closing Enter survive the close, matching
- * `sis-inline-tighten-head-rule`/`-tail-rule`'s `'one` default; set
- * `keepHeadSpace`/`keepTailSpace` to `false` for the tight behavior.
+ * that two spaces or Enter close again. Closing removes one space at the head
+ * and one before the cursor, like `sis-inline-tighten-head-rule`/`-tail-rule`
+ * set to `1`; set `keepHeadSpace`/`keepTailSpace` to keep them instead. Blank
+ * regions are left untouched (see `inlineRegionBlank`), like
+ * `emacs-smart-input-source`.
  */
 export function createInlineController(config: VimInline): InlineController {
   const [active, setActive] = createSignal(false)

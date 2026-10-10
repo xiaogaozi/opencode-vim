@@ -245,18 +245,21 @@ It needs the input source switching above to be enabled:
   keep `Enter` submitting while the region is open.
 - While the prompt completion (`/` commands, `@` mentions) is open, `Enter`
   selects the highlighted item instead; the region stays open.
-- Closing keeps the space that opened the region (`keepHeadSpace`, default
-  `true`) and, on `Enter`, the space typed before the cursor (`keepTailSpace`,
-  default `true`). This matches `emacs-smart-input-source`'s default
-  `sis-inline-tighten-head-rule`/`-tail-rule` (`'one`): `中文` + space + `123`
-  + `Enter` produces `中文 123`, and a space inserted into existing text
-  (`中文123` edited between `文` and `1`) stays as well.
-- Closing with two spaces leaves at most one trailing space, and a kept head
-  space survives that trim (the cursor can sit right after it).
-- Set `keepHeadSpace` or `keepTailSpace` to `false` to restore the tight
-  behavior: the head space is removed on close, and `Enter` also removes one
-  space before the cursor. With both `false`, `中文` + space + `abc` + space +
-  `Enter` produces `中文abc`.
+- Closing removes one space at the head (the space that opened the region) and,
+  on `Enter`, one space before the cursor. That matches
+  `emacs-smart-input-source` with `sis-inline-tighten-head-rule`/
+  `-tail-rule` set to `1`: `中文` + space + `abc` + `Enter` produces `中文abc`,
+  and `abc` + space + `Enter` + `（` keeps the punctuation adjacent.
+- Closing with two spaces leaves at most one trailing space, so
+  `中文` + space + `abc` + two spaces produces `中文abc `; the double space is
+  how the region ends with a separator before following text.
+- A region that contains only spaces is left untouched, like
+  `emacs-smart-input-source`, so a space inserted into existing text survives:
+  editing `中文123` between `文` and `1` and closing produces `中文 123`.
+- Set `keepHeadSpace` or `keepTailSpace` to `true` to keep those spaces when
+  the region has content instead (the behavior of the `0`/`'one` rules); a kept
+  head space also survives the trailing trim when the cursor sits right after
+  it.
 - The region also closes when insert mode is left or Vim mode is disabled.
 
 ### Debugging
