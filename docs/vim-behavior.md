@@ -19,6 +19,7 @@ Use `/vim` to toggle the plugin on or off.
 | `x`, `d`, `c`, `y`, `p` | Delete, change, yank, and paste |
 | `u`, `Ctrl+r`, `.` | Undo, redo, and repeat the last change |
 | `v`, `V` | Visual and visual-line selection |
+| `U`, `u`, `~` in visual mode | Uppercase, lowercase, or swap the case of the selection |
 | `3w`, `diw`, `ci"`, `yiq`, `dip`, `yib` | Counts and text objects |
 | `k`, `j` from an empty prompt | Browse previous and next prompts |
 | `Enter` in normal mode | Submit the prompt |
