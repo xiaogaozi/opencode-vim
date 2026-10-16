@@ -209,6 +209,19 @@ const cases: Array<[string, string, number?]> = [
   ["one \ntwo", "llld2e"],
   ["你好 \n世界", "lld2w"],
   ["你好 \n世界", "llcwX<Esc>"],
+  ["one two three", "vllU"],
+  ["ONE TWO THREE", "vllu"],
+  ["AbCdEf ghi", "vll~"],
+  ["one\ntwo\nthree", "VjU"],
+  ["one\ntwo\nthree", "vjU"],
+  ["one\ntwo\nthree", "vjlU"],
+  ["one\ntwo", "llvjU"],
+  ["ab\ncd", "jvllU"],
+  ["one two", "v$U"],
+  ["one two", "v$~"],
+  ["one two three", "vllUu"],
+  ["中abc", "vllU"],
+  ["a👩‍💻b", "vlllU"],
 ]
 
 for (const [text, keys, width = 80] of cases) {

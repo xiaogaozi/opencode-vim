@@ -75,6 +75,41 @@ describe("real textarea Vim editing", () => {
     expect(fixture.input.plainText).toBe("abcdef")
   })
 
+  test("visual case changes", async () => {
+    fixture = await createFixture("one two three")
+    await fixture.keys("0vllU")
+    expect(fixture.input.plainText).toBe("ONE two three")
+    await fixture.keys("u")
+    expect(fixture.input.plainText).toBe("one two three")
+    await fixture.keys("0vll~")
+    expect(fixture.input.plainText).toBe("ONE two three")
+    await fixture.keys("u")
+    expect(fixture.input.plainText).toBe("one two three")
+    await fixture.keys("0VU")
+    expect(fixture.input.plainText).toBe("ONE TWO THREE")
+    await fixture.keys("u")
+    expect(fixture.input.plainText).toBe("one two three")
+  })
+
+  test("visual case changes span lines", async () => {
+    fixture = await createFixture("one\ntwo\nthree")
+    await fixture.keys("0VjU")
+    expect(fixture.input.plainText).toBe("ONE\nTWO\nthree")
+    await fixture.keys("u")
+    expect(fixture.input.plainText).toBe("one\ntwo\nthree")
+    fixture.input.cursorOffset = 0
+    await fixture.keys("vjU")
+    expect(fixture.input.plainText).toBe("ONE\nTwo\nthree")
+    await fixture.keys("u")
+    expect(fixture.input.plainText).toBe("one\ntwo\nthree")
+  })
+
+  test("visual case changes keep graphemes intact", async () => {
+    fixture = await createFixture("中a👩‍💻b")
+    await fixture.keys("0v$U")
+    expect(fixture.input.plainText).toBe("中A👩‍💻B")
+  })
+
   test("CJK word motions stop at Chinese punctuation", async () => {
     fixture = await createFixture("你好，世界。测试")
     await fixture.keys("w")

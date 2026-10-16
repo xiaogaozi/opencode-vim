@@ -753,6 +753,15 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
         actions: [{ type: "cursor-move", position: cursor }],
       }
     }
+    if (
+      !ctrl &&
+      isVisualMode(vim.mode) &&
+      vim.phase === "idle" &&
+      vim.visualAnchor &&
+      (key === "U" || key === "u" || key === "~")
+    ) {
+      return visualCaseChange(key)
+    }
     let range = ctrl ? undefined : lineMotion(key)
     if (
       range &&
@@ -900,6 +909,46 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
       }
     }
     return result
+  }
+
+  /**
+   * Vim's visual-mode case commands: U uppercases, u lowercases, and ~ swaps
+   * the case of the selection. The engine does not implement them, so apply
+   * the change here and finish in normal mode with the cursor at the start of
+   * the selection, like Vim does.
+   */
+  function visualCaseChange(key: "U" | "u" | "~"): { newCtx: VimContext; actions: HostAction[] } {
+    const anchor = vim.visualAnchor!
+    const cursor = vim.cursor
+    const linewise = vim.mode === "visual-line"
+    const ordered = anchor.line < cursor.line || (anchor.line === cursor.line && anchor.col <= cursor.col)
+    const start = ordered ? anchor : cursor
+    const end = ordered ? cursor : anchor
+    const changed: Array<{ line: number; text: string }> = []
+
+    for (let line = start.line; line <= end.line && line < buffer.getLineCount(); line++) {
+      const text = buffer.getLine(line)
+      const from = linewise || line !== start.line ? 0 : Math.min(start.col, text.length)
+      const to = linewise || line !== end.line ? text.length : Math.min(text.length, end.col + 1)
+      if (from >= to) continue
+      const transformed = codec.encode(transformCase(codec.decode(text.slice(from, to)), key))
+      if (transformed === text.slice(from, to)) continue
+      changed.push({ line, text: text.slice(0, from) + transformed + text.slice(to) })
+    }
+
+    for (const item of changed) buffer.setLine(item.line, item.text)
+    const position = linewise ? { line: start.line, col: 0 } : start
+    // Vim undoes back to the start of the selection; the native history
+    // records the host cursor when the change starts, so move it there first.
+    const input = activeInput
+    if (changed.length && input && !input.isDestroyed) input.cursorOffset = hostOffset(activeMap, position)
+    const actions: HostAction[] = []
+    if (changed.length) actions.push({ type: "content-change", content: buffer.getContent() })
+    actions.push({ type: "cursor-move", position }, { type: "mode-change", mode: "normal" })
+    return {
+      newCtx: { ...resetContext(vim), mode: "normal", cursor: position, visualAnchor: null, pendingChange: [] },
+      actions,
+    }
   }
 
   function lineMotion(key: string): MotionRange | undefined {
@@ -1153,6 +1202,22 @@ function readOnlyKey(key: string, ctrl: boolean, vim: VimContext) {
 function keyEventForToken(token: string): KeyEvent {
   if (token.startsWith("<C-") && token.endsWith(">")) return { name: token.slice(3, -1), ctrl: true } as KeyEvent
   return { name: token } as KeyEvent
+}
+
+const caseSegments = new Intl.Segmenter(undefined, { granularity: "grapheme" })
+
+/**
+ * Case-maps text for the visual-mode case commands. `~` swaps each grapheme
+ * like the engine's normal-mode `~`; `U` and `u` map the whole slice.
+ */
+function transformCase(text: string, key: "U" | "u" | "~") {
+  if (key === "U") return text.toUpperCase()
+  if (key === "u") return text.toLowerCase()
+  let result = ""
+  for (const { segment } of caseSegments.segment(text)) {
+    result += segment === segment.toUpperCase() ? segment.toLowerCase() : segment.toUpperCase()
+  }
+  return result
 }
 
 function wordOperatorRange(range: MotionRange, buffer: TextBuffer): MotionRange {
