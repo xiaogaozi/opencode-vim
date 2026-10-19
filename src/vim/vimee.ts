@@ -391,6 +391,7 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
     if (!input) return
     history?.begin()
 
+    let nextMode: VimContext["mode"] | undefined
     for (const action of actions) {
       switch (action.type) {
         case "content-change":
@@ -409,7 +410,7 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
             cancelYankFlash()
             clearVisualSelection(input)
           }
-          syncMode(state, action.mode)
+          nextMode = action.mode
           break
         case "quit":
           ctx.blur()
@@ -418,6 +419,7 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
           ctx.submit()
           break
         case "command":
+          if (nextMode !== undefined) syncMode(state, nextMode)
           dispatchCommand(action.command, ctx)
           return
       }
@@ -425,6 +427,9 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
 
     // The engine context already has the final cursor; move the editor once.
     setCursor(input, currentMap, vim.cursor)
+    // Apply the mode signal only after the cursor is in place: consumers like
+    // the input source sample the editor cursor when the mode flips.
+    if (nextMode !== undefined) syncMode(state, nextMode)
     syncVisualSelection(input, currentMap, ctx)
     if (vim.mode === "insert") history?.begin()
     else history?.end()
