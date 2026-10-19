@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { createFixture } from "../helpers/fixture"
+import {
+  DEFAULT_ENGLISH_PATTERN,
+  DEFAULT_OTHER_PATTERN,
+  compilePattern,
+  detectContextLanguage,
+} from "../../src/vim/context"
+import { displayToChar } from "../../src/vim/map"
 
 let fixture: Awaited<ReturnType<typeof createFixture>> | undefined
 afterEach(() => {
@@ -563,5 +570,37 @@ describe("real textarea Vim editing", () => {
     expect(fixture.input.plainText).toBe("b")
     await fixture.keys("u")
     expect(fixture.input.plainText).toBe("a\u0301b")
+  })
+})
+
+describe("insert context timing", () => {
+  const patterns = {
+    english: compilePattern(DEFAULT_ENGLISH_PATTERN, DEFAULT_ENGLISH_PATTERN),
+    other: compilePattern(DEFAULT_OTHER_PATTERN, DEFAULT_OTHER_PATTERN),
+    aggressiveLine: true,
+  }
+
+  test("the input source samples the cursor after it moved to the insert position", async () => {
+    fixture = await createFixture("（a）")
+    const host = fixture
+    await host.keys("ll")
+    expect(host.input.cursorOffset).toBe(3)
+
+    let sampledOffset: number | undefined
+    let language: string | undefined
+    const unsubscribe = host.state.subscribe(() => {
+      if (host.state.mode() !== "insert" || sampledOffset !== undefined) return
+      sampledOffset = host.input.cursorOffset
+      const text = host.input.plainText
+      language = detectContextLanguage(text, displayToChar(text, sampledOffset), patterns)
+    })
+
+    // Insert after the full-width `）`: the sampled cursor must already sit at
+    // display offset 5, so the detector sees `）` and picks the other language.
+    await host.keys("a")
+    unsubscribe()
+
+    expect(sampledOffset).toBe(5)
+    expect(language).toBe("other")
   })
 })
