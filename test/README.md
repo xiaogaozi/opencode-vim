@@ -113,7 +113,7 @@ setup time, execution wall time, and per-scenario timings for preparation,
 server/session startup, TUI startup, assertions, and cleanup. Per-scenario times
 overlap when running in parallel; their sum is not the run's wall time. CI uploads
 these results even on success, and caches npm downloads and host/reference
-binaries. OpenCode's latest stable version is still resolved on every run.
+binaries. CI pins the E2E OpenCode version with `VIM_E2E_VERSION`; local runs resolve the latest stable unless that variable is set.
 
 Detached tmux is configured with explicit foreground/background colors so it
 answers terminal color queries instead of delaying host startup until theme
