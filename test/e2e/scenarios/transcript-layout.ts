@@ -4,7 +4,7 @@ import { readerContains, selected } from "../support/screens"
 import { yankFlashMatches } from "../support/colors"
 
 export async function transcriptLayout({ terminal }: Fixture) {
-  const { keys, type, screen } = terminal
+  const { keys, type, screen, settle } = terminal
   await keys("Escape")
   let before: string[] = []
   await screen("natural-bottom", (text) => {
@@ -30,6 +30,7 @@ export async function transcriptLayout({ terminal }: Fixture) {
   for (let cycle = 0; cycle < 2; cycle++) {
     await type("gg")
     await screen(`oldest-${cycle}`, (text) => selected(text, "Earlier line 0") && !text.includes("Latest reply"))
+    await settle()
     for (const value of ["First part", "Second part", "Latest question", "Latest reply"]) {
       await type("j")
       await screen(`next-${cycle}-${value}`, (text) => selected(text, value))
@@ -45,7 +46,9 @@ export async function transcriptLayout({ terminal }: Fixture) {
   }
   await type("gg")
   await screen("oldest-again", (text) => selected(text, "Earlier line 0"))
-  await type("ss")
+  await type("s")
+  await screen("prompt-before-reentry", (text) => text.includes("NORMAL") && !text.includes("SESSION"))
+  await type("s")
   await screen(
     "reentry-selects-latest",
     (text) =>
