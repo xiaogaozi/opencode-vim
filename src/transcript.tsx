@@ -1,8 +1,10 @@
 // TSX ensures the plugin loader shares the host's OpenTUI classes.
 import type { Context } from "@opencode/plugin/tui/context"
 import {
+  CodeRenderable,
   MouseEvent,
   ScrollBoxRenderable,
+  SyntaxStyle,
   TextBufferRenderable,
   type OptimizedBuffer,
   type Renderable,
@@ -20,6 +22,7 @@ type SearchStyle = {
 
 type SearchTextBuffer = {
   getSyntaxStyle(): SearchStyle | null
+  setSyntaxStyle?(style: SyntaxStyle): void
   addHighlightByCharRange(highlight: {
     start: number
     end: number
@@ -68,6 +71,7 @@ export function createTranscriptSelection(
   let searchPattern = ""
   let searchRef = 0
   let searchBuffers = new Set<SearchTextBuffer>()
+  let fallbackSyntax: SyntaxStyle | undefined
   let navigation:
     | {
         from: string | undefined
@@ -292,11 +296,16 @@ export function createTranscriptSelection(
     const ref = ++searchRef
     for (const [index, match] of matches.entries()) {
       if (index >= SEARCH_HIGHLIGHT_LIMIT && matchKey(match) !== currentKey) continue
+      if (!(match.node instanceof CodeRenderable)) continue
       const buffer = match.buffer
       if (!buffer) continue
       try {
-        const syntax = buffer.getSyntaxStyle()
-        if (!syntax) continue
+        let syntax = buffer.getSyntaxStyle()
+        if (!syntax) {
+          fallbackSyntax ??= SyntaxStyle.create()
+          buffer.setSyntaxStyle?.(fallbackSyntax)
+          syntax = fallbackSyntax
+        }
         const current = matchKey(match) === currentKey
         const content = match.node instanceof TextBufferRenderable ? match.node.plainText : ""
         // Text buffer ranges count display cells and give explicit newlines no
@@ -338,7 +347,7 @@ export function createTranscriptSelection(
           start,
           end,
           styleId: style,
-          priority: 1000,
+          priority: 255,
           hlRef: ref,
         })
         searchBuffers.add(buffer)
@@ -633,6 +642,94 @@ export function createTranscriptSelection(
     return { scroll, selected, ranges, hasLatest, top, bottom }
   }
 
+  function matchSegments(match: SearchNodeMatch, view: NonNullable<ReturnType<typeof inspect>>) {
+    if (!(match.node instanceof TextBufferRenderable) || match.node.isDestroyed || !match.node.visible) return []
+    const node = match.node
+    const text = node.plainText
+    if (!text) return []
+    const starts = lineStarts(text)
+    const info = node.lineInfo
+    const method = context.renderer.widthMethod
+    const first = lineAt(starts, match.start)
+    const last = lineAt(starts, Math.max(match.start, match.end - 1))
+    const segments: Array<{ x: number; y: number; width: number }> = []
+    for (let line = first; line <= last; line++) {
+      const lineStart = starts[line]!
+      const lineEnd = line + 1 < starts.length ? starts[line + 1]! - 1 : text.length
+      const from = Math.max(match.start, lineStart)
+      const to = Math.min(match.end, lineEnd)
+      if (from >= to) continue
+      const colStart = charToDisplay(text.slice(lineStart, from), from - lineStart, method)
+      const colEnd = charToDisplay(text.slice(lineStart, to), to - lineStart, method)
+      const sources = info.lineSources ?? []
+      const sourceStart = info.lineStartCols[sources.indexOf(line)] ?? 0
+      let placed = false
+      for (let visual = 0; visual < sources.length; visual++) {
+        if (sources[visual] !== line) continue
+        const relativeStart = (info.lineStartCols[visual] ?? 0) - sourceStart
+        const visualWidth = info.lineWidthCols[visual] ?? 0
+        const begin = Math.max(colStart, relativeStart)
+        const end = Math.min(colEnd, relativeStart + visualWidth)
+        if (begin >= end) continue
+        placed = true
+        segments.push({
+          x: node.x + begin - relativeStart,
+          y: node.y + visual - node.scrollY,
+          width: end - begin,
+        })
+      }
+      if (!placed) {
+        segments.push({
+          x: node.x + colStart,
+          y: node.y + line - first - node.scrollY,
+          width: colEnd - colStart,
+        })
+      }
+    }
+    void view
+    return segments
+  }
+
+  function drawSearchCellHighlights(buffer: OptimizedBuffer, view: NonNullable<ReturnType<typeof inspect>>) {
+    if (!searchPattern || !searchMatches.length) return
+    const current = searchMatches[searchIndex]
+    const currentKey = current ? matchKey(current) : ""
+    const colors = buffer.buffers
+    const method = context.renderer.widthMethod
+    for (const match of searchMatches) {
+      const node = match.node
+      if (!(node instanceof TextBufferRenderable) || node instanceof CodeRenderable) continue
+      const content = node.plainText
+      if (!content) continue
+      const wide = isWideText(content.slice(match.start, match.end), method)
+      const isCurrent = matchKey(match) === currentKey
+      const foreground = wide
+        ? isCurrent
+          ? context.theme.text.feedback.info.base
+          : context.theme.text.feedback.warning.base
+        : context.theme.background.base
+      const background = isCurrent ? context.theme.text.feedback.info.base : context.theme.text.feedback.warning.base
+      for (const segment of matchSegments(match, view)) {
+        const top = Math.max(view.top, segment.y)
+        const bottom = Math.min(view.bottom, segment.y + 1, buffer.height)
+        if (top >= bottom) continue
+        for (let y = top; y < bottom; y++) {
+          const left = Math.max(view.scroll.viewport.x, segment.x)
+          const right = Math.min(
+            buffer.width,
+            view.scroll.viewport.x + view.scroll.viewport.width,
+            segment.x + segment.width,
+          )
+          for (let x = left; x < right; x++) {
+            const offset = (y * buffer.width + x) * 4
+            colors.fg.set(foreground.buffer, offset)
+            if (!wide) colors.bg.set(background.buffer, offset)
+          }
+        }
+      }
+    }
+  }
+
   return {
     latest,
     move,
@@ -699,6 +796,7 @@ export function createTranscriptSelection(
       for (let y = top; y < bottom; y++) {
         buffer.drawText("▎", x, y, context.theme.text.feedback.info.base, context.theme.background.base)
       }
+      drawSearchCellHighlights(buffer, view)
     },
   }
 }
