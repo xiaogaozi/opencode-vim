@@ -1,22 +1,35 @@
 /** @jsxImportSource @opentui/solid */
 import type { Context } from "@opencode/plugin/tui/context"
-import { BoxRenderable, type KeyEvent } from "@opentui/core"
+import { BoxRenderable, type KeyEvent, type PasteEvent } from "@opentui/core"
 import { createEffect, createSignal, onCleanup, onMount, untrack } from "solid-js"
 import type { VimConfig } from "../vim/config"
+import { keyNotation } from "../vim/keys"
 import { YANK_FLASH_MS } from "../vim/vimee"
 import { Reader } from "../readers"
 import { createSessionKeymaps, pageCommand, sessionModeKey } from "./session-keys"
-import { createTranscriptSelection } from "../transcript"
+import { createTranscriptSelection, type TranscriptSearch } from "../transcript"
 import type { TranscriptItem } from "../transcript-items"
 import type { VimClipboard } from "../clipboard"
+import { appendSearchText, backspaceSearchText, deleteWordSearchText, type SearchDirection } from "./search"
 
 export const SESSION_MODE = "opencode-vim.session"
+
+type SearchInput = {
+  direction: SearchDirection
+  prefix: "/" | "?"
+  text: string
+}
+
+type SearchInfo = TranscriptSearch & { status: "found" }
 
 export function createSessionMode(context: Context, config: VimConfig, clipboard: VimClipboard) {
   const mappings = createSessionKeymaps(config, false)
   const [active, setActive] = createSignal(false)
   const [reading, setReading] = createSignal<TranscriptItem>()
   const [notice, setNotice] = createSignal("")
+  const [searchInput, setSearchInput] = createSignal<SearchInput>()
+  const [searchBusy, setSearchBusy] = createSignal(false)
+  const [searchInfo, setSearchInfo] = createSignal<SearchInfo>()
   const positions = new Map<string, number>()
   let sessionID = ""
   let selectedID: string | undefined
@@ -30,6 +43,9 @@ export function createSessionMode(context: Context, config: VimConfig, clipboard
   let noticeTimer: ReturnType<typeof setTimeout> | undefined
   let yankTimer: ReturnType<typeof setTimeout> | undefined
   let yankID: string | undefined
+  let searchAbort: AbortController | undefined
+  let lastPattern = ""
+  let lastDirection: SearchDirection = 1
 
   context.keymap.layer(() => ({
     mode: SESSION_MODE,
@@ -48,9 +64,117 @@ export function createSessionMode(context: Context, config: VimConfig, clipboard
     context.renderer.requestRender()
   }
 
+  function searchNotice(message: string) {
+    if (noticeTimer) clearTimeout(noticeTimer)
+    noticeTimer = undefined
+    setNotice(message)
+  }
+
+  function resetSearch() {
+    searchAbort?.abort()
+    searchAbort = undefined
+    lastPattern = ""
+    lastDirection = 1
+    setSearchBusy(false)
+    setSearchInput(undefined)
+    setSearchInfo(undefined)
+  }
+
+  function beginSearch(direction: SearchDirection) {
+    prefix = count = ""
+    mappings.cancel()
+    clearYankFlash()
+    setNotice("")
+    setSearchInput({ direction, prefix: direction === 1 ? "/" : "?", text: "" })
+  }
+
+  function handleSearchKey(event: KeyEvent, key: string) {
+    const current = searchInput()
+    if (!current) return
+    event.preventDefault()
+    event.stopPropagation()
+    if (key === "<Esc>" || key === "<C-[>") {
+      setSearchInput(undefined)
+      return
+    }
+    if (key === "<CR>") {
+      setSearchInput(undefined)
+      void runSearch(current.text || lastPattern, current.direction)
+      return
+    }
+    let text = current.text
+    if (key === "<BS>") text = backspaceSearchText(text)
+    else if (key === "<C-u>") text = ""
+    else if (key === "<C-w>") text = deleteWordSearchText(text)
+    else text = appendSearchText(text, key)
+    setSearchInput({ ...current, text })
+  }
+
+  function handleBusyKey(event: KeyEvent, key: string) {
+    event.preventDefault()
+    event.stopPropagation()
+    if (key !== "<Esc>" && key !== "<C-[>") return
+    searchAbort?.abort()
+    searchAbort = undefined
+    setSearchBusy(false)
+    setSearchInput(undefined)
+    searchNotice("Search cancelled")
+  }
+
+  async function runSearch(pattern: string, direction: SearchDirection) {
+    if (!pattern) {
+      searchNotice("No previous search")
+      return
+    }
+    searchAbort?.abort()
+    const controller = new AbortController()
+    searchAbort = controller
+    lastPattern = pattern
+    lastDirection = direction
+    setSearchInfo(undefined)
+    setNotice("")
+    setSearchBusy(true)
+    try {
+      const outcome = await transcript?.search(pattern, direction, controller.signal)
+      if (disposed || controller.signal.aborted || !outcome || outcome.status === "cancelled") return
+      if (outcome.status === "not-found") {
+        searchNotice(`Pattern not found: ${pattern}`)
+        return
+      }
+      setSearchInfo(outcome as SearchInfo)
+    } finally {
+      if (searchAbort === controller) {
+        searchAbort = undefined
+        setSearchBusy(false)
+      }
+    }
+  }
+
+  async function repeatSearch(direction: SearchDirection, count: number) {
+    if (!lastPattern) {
+      searchNotice("No previous search")
+      return
+    }
+    const outcome = await transcript?.next(direction, count)
+    if (!outcome) return
+    if (outcome.status === "not-found") {
+      setSearchInfo(undefined)
+      searchNotice(`Pattern not found: ${lastPattern}`)
+      return
+    }
+    setNotice("")
+    setSearchInfo({ ...outcome, direction: lastDirection } as SearchInfo)
+  }
+
   function close(restoreFocus = true) {
     if (!active()) return
+    searchAbort?.abort()
+    searchAbort = undefined
+    setSearchBusy(false)
+    setSearchInput(undefined)
+    setSearchInfo(undefined)
     clearYankFlash()
+    transcript?.clearSearch()
     if (reading()) context.ui.dialog.clear()
     setActive(false)
     context.renderer.removePostProcessFn(draw)
@@ -80,6 +204,7 @@ export function createSessionMode(context: Context, config: VimConfig, clipboard
     prompt = context.renderer.currentFocusedEditor
     prefix = count = ""
     positions.clear()
+    resetSearch()
     setNotice("")
     popMode = context.keymap.mode.push(SESSION_MODE)
     transcript = createTranscriptSelection(context, sessionID, (id) => {
@@ -142,38 +267,68 @@ export function createSessionMode(context: Context, config: VimConfig, clipboard
   }
 
   const onKey = (event: KeyEvent) => {
-    if (!active() || reading()) return
-    const key = sessionModeKey(context, event, config.sessionKey, SESSION_MODE, mappings.accepts)
+    if (!active() || reading() || event.defaultPrevented) return
+    const key = keyNotation(event)
     if (!key) return
-    if (mappings.resolve(key) === "passthrough") return
+    if (searchBusy()) {
+      handleBusyKey(event, key)
+      return
+    }
+    if (searchInput()) {
+      handleSearchKey(event, key)
+      return
+    }
+    if ((key === "<Esc>" || key === "<C-[>") && searchInfo()) {
+      event.preventDefault()
+      event.stopPropagation()
+      prefix = count = ""
+      clearYankFlash()
+      transcript?.dismissSearch()
+      setSearchInfo(undefined)
+      setNotice("")
+      return
+    }
+    if (event.super || event.meta) return
+    if (key === "/" || key === "?") {
+      event.preventDefault()
+      event.stopPropagation()
+      beginSearch(key === "/" ? 1 : -1)
+      return
+    }
+    const sessionKey = sessionModeKey(context, event, config.sessionKey, SESSION_MODE, mappings.accepts)
+    if (!sessionKey) return
+    if (mappings.resolve(sessionKey) === "passthrough") return
     event.preventDefault()
     event.stopPropagation()
     clearYankFlash()
     setNotice("")
-    if (key === config.sessionKey || key === "<Esc>" || key === "<C-[>") {
+    if (sessionKey === config.sessionKey || sessionKey === "<Esc>" || sessionKey === "<C-[>") {
       close()
       return
     }
-    if (/^[0-9]$/.test(key) && (count || key !== "0")) {
-      count = (count + key).slice(0, 6)
+    if (/^[0-9]$/.test(sessionKey) && (count || sessionKey !== "0")) {
+      count = (count + sessionKey).slice(0, 6)
       return
     }
     const amount = Number(count) || 1
     count = ""
     const previous = prefix
     prefix = ""
-    let command = pageCommand(key)
-    if (key === "j" || key === "<Down>") {
+    let command = pageCommand(sessionKey)
+    if (sessionKey === "n" || sessionKey === "N") {
+      void repeatSearch(sessionKey === "n" ? lastDirection : lastDirection === 1 ? -1 : 1, amount)
+      return
+    } else if (sessionKey === "j" || sessionKey === "<Down>") {
       transcript?.move("next", amount)
       return
-    } else if (key === "k" || key === "<Up>") {
+    } else if (sessionKey === "k" || sessionKey === "<Up>") {
       transcript?.move("previous", amount)
       return
-    } else if (key === "G") {
+    } else if (sessionKey === "G") {
       transcript?.latest()
       return
-    } else if (key === "g" && previous === "g") command = "session.first"
-    else if (key === "y" && previous === "y") {
+    } else if (sessionKey === "g" && previous === "g") command = "session.first"
+    else if (sessionKey === "y" && previous === "y") {
       const message = selected()
       if (message) {
         yankID = message.id
@@ -181,8 +336,8 @@ export function createSessionMode(context: Context, config: VimConfig, clipboard
         context.renderer.requestRender()
         void copy(message.text)
       }
-    } else if (key === "g" || key === "y") prefix = key
-    else if (key === "<CR>") {
+    } else if (sessionKey === "g" || sessionKey === "y") prefix = sessionKey
+    else if (sessionKey === "<CR>") {
       transcript?.sync()
       if (transcript?.toggle()) return
       const message = selected()
@@ -192,6 +347,17 @@ export function createSessionMode(context: Context, config: VimConfig, clipboard
       transcript?.followViewport()
       for (let index = 0; index < amount; index++) context.keymap.dispatch(command)
     }
+  }
+
+  const onPaste = (event: PasteEvent) => {
+    if (!active() || reading() || searchBusy()) return
+    const current = searchInput()
+    if (!current) return
+    const text = new TextDecoder().decode(event.bytes).replace(/\s+/g, " ")
+    if (!text) return
+    event.preventDefault()
+    event.stopPropagation()
+    setSearchInput({ ...current, text: (current.text + text).slice(0, 200) })
   }
 
   createEffect(() => {
@@ -215,6 +381,7 @@ export function createSessionMode(context: Context, config: VimConfig, clipboard
     })
   onMount(() => {
     context.renderer.keyInput.prependListener("keypress", onKey)
+    context.renderer.keyInput.prependListener("paste", onPaste)
     context.renderer.on("focused_renderable", onFocus)
   })
   onCleanup(() => {
@@ -222,8 +389,19 @@ export function createSessionMode(context: Context, config: VimConfig, clipboard
     close()
     if (noticeTimer) clearTimeout(noticeTimer)
     context.renderer.keyInput.off("keypress", onKey)
+    context.renderer.keyInput.off("paste", onPaste)
     context.renderer.off("focused_renderable", onFocus)
   })
+
+  function searchHint() {
+    const input = searchInput()
+    if (input) return `${input.prefix}${input.text}█`
+    if (searchBusy()) return "Loading history… · Esc cancel"
+    const info = searchInfo()
+    if (!info) return ""
+    const partial = info.partial ? "+" : ""
+    return `${info.direction === 1 ? "/" : "?"}${info.pattern} [${info.index}/${info.total}${partial}] · n/N next`
+  }
 
   return {
     active,
@@ -232,7 +410,7 @@ export function createSessionMode(context: Context, config: VimConfig, clipboard
     Status() {
       return (
         <text fg={context.theme.text.feedback.info.base} flexShrink={0} wrapMode="none">
-          {notice() || `SESSION · Enter open · yy copy · ${config.sessionKey} prompt`}
+          {searchHint() || notice() || `SESSION · Enter open · / search · yy copy · ${config.sessionKey} prompt`}
         </text>
       )
     },

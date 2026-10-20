@@ -8,9 +8,10 @@ import {
 import type { Context } from "@opencode/plugin/tui/context"
 import { createEffect, onCleanup } from "solid-js"
 import { createPromptMap, hostPosition } from "../vim/map"
+import { createSyntaxStyle } from "../vim/syntax"
 
 export function createReaderSyntax(context: Context) {
-  const style = SyntaxStyle.create()
+  const style = createSyntaxStyle(context)
   createEffect(() => {
     const theme = context.theme.surface("dialog")
     const tokens: Record<string, StyleDefinitionInput> = { default: { fg: theme.text.base } }
