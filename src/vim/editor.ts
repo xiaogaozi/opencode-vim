@@ -26,6 +26,7 @@ export type EditorInput = {
   editBuffer?: EditBuffer
   undo?: () => boolean
   redo?: () => boolean
+  hasSelection?: () => boolean
   visualCursor?: { visualCol: number }
   editorView?: {
     getLogicalLineInfo?: () => LineInfo

@@ -8,6 +8,7 @@ type Input = {
   cursorOffset: number
   setSelection: (start: number, end: number) => void
   insertText: (text: string) => void
+  editorView?: { deleteSelectedText?: () => void }
   deleteChar: () => unknown
   clearSelection: () => unknown
 }
@@ -51,7 +52,13 @@ export function editInput(input: Input, value: string, widthMethod: WidthMethod)
   if (start === end) input.cursorOffset = startOffset
   else input.setSelection(startOffset, startOffset + charToDisplay(before.slice(start, end), end - start, widthMethod))
   const inserted = value.slice(start, valueEnd)
-  if (inserted) input.insertText(inserted)
+  if (start !== end && inserted && input.editorView?.deleteSelectedText) {
+    // OpenTUI 0.6 records the selection deletion separately from the insert.
+    // Delete explicitly so the native history tracker sees both entries; keep
+    // pure deletions on deleteChar so the host still emits its input event.
+    input.editorView.deleteSelectedText()
+    input.insertText(inserted)
+  } else if (inserted) input.insertText(inserted)
   else input.deleteChar()
 }
 
