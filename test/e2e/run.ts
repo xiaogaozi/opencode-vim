@@ -20,10 +20,18 @@ import {
   transcriptHistory,
 } from "./scenarios/transcript"
 import { readerMessages, transcriptMessages, historyMessages } from "./data/transcript"
+import { markdownSearchMessages, searchMessages } from "./data/search"
 import { shellMessages, backgroundShellMessages } from "./data/shell"
 import { shellReader } from "./scenarios/shell-reader"
 import { backgroundShell } from "./scenarios/background-shell"
 import { sessionKeymaps, sessionAgentBinding } from "./scenarios/session-keymaps"
+import { sessionSearch } from "./scenarios/session-search"
+import { sessionSearchUnicode } from "./scenarios/session-search-unicode"
+import { sessionSearchMarkdown } from "./scenarios/session-search-markdown"
+import { sessionSearchCjk } from "./scenarios/session-search-cjk"
+import { deepSearchMessages, sessionSearchDeep } from "./scenarios/session-search-deep"
+import { readerSearch } from "./scenarios/reader-search"
+import { readerSearchCjk } from "./scenarios/reader-search-cjk"
 import { readMessages } from "./data/read"
 import { readReader } from "./scenarios/read-reader"
 import { fileChangeMessages, pendingChangeMessages } from "./data/file-changes"
@@ -276,6 +284,44 @@ const scenarios: Array<{
       cli: { session: { verbosity: "low" }, diffs: { view: "split" } },
       vim: { diffView: "diff" },
     },
+  },
+  {
+    name: "session-search",
+    run: sessionSearch,
+    setup: { messages: historyMessages(), cli: { animations: false } },
+  },
+  {
+    name: "reader-search",
+    run: readerSearch,
+    setup: { messages: readerMessages, probe: true },
+  },
+  {
+    name: "reader-search-cjk",
+    run: readerSearchCjk,
+    setup: {
+      messages: [{ id: "msg_reader_cjk", type: "user", text: "请退出", time: { created: 1 } }],
+      probe: true,
+    },
+  },
+  {
+    name: "session-search-unicode",
+    run: sessionSearchUnicode,
+    setup: { messages: searchMessages, probe: true, cli: { animations: false } },
+  },
+  {
+    name: "session-search-markdown",
+    run: sessionSearchMarkdown,
+    setup: { messages: markdownSearchMessages, probe: true, cli: { animations: false } },
+  },
+  {
+    name: "session-search-cjk",
+    run: sessionSearchCjk,
+    setup: { messages: searchMessages, probe: true, cli: { animations: false } },
+  },
+  {
+    name: "session-search-deep",
+    run: sessionSearchDeep,
+    setup: { messages: deepSearchMessages(), cli: { animations: false } },
   },
   {
     name: "session-keymaps",

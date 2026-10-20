@@ -35,7 +35,7 @@ export function diffReader(initial: DiffView = "after", remapped = false) {
         const content = modal.content
         if (!content.includes(description(view)) || !content.includes("Saved excerpts")) return false
         if (!/After.*Before.*Diff/.test(content)) return false
-        if (!text.includes(`v select · ${remapped ? "<C-w>w" : "tab"} switch view · s prompt`)) return false
+        if (!text.includes(`v select · / search · ${remapped ? "<C-w>w" : "tab"} switch view · s prompt`)) return false
         if (content.includes("old first") !== (view !== "after")) return false
         if (content.includes("new first") !== (view !== "before")) return false
         if (content.includes("old last") !== (view !== "after")) return false

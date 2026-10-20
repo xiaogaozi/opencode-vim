@@ -73,6 +73,14 @@ describe("vim display offsets", () => {
     expect(displayToChar(text, 3)).toBe(2)
     expect(charToDisplay(text, 2)).toBe(3)
   })
+
+  test("can ignore explicit newlines for text buffer offsets", () => {
+    const text = "中\nx"
+
+    expect(charToDisplay(text, 0, "unicode", 0)).toBe(0)
+    expect(charToDisplay(text, 2, "unicode", 0)).toBe(2)
+    expect(charToDisplay(text, 3, "unicode", 0)).toBe(3)
+  })
 })
 
 describe("cached Vim positions", () => {

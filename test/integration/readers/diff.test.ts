@@ -20,7 +20,7 @@ test.each(["after", "before", "diff"] as const)("change views honor diffView=%s"
   const active = f.renderer.root.findDescendantById(`vim-change-view-${diffView}`) as TextRenderable
   expect(active.bg).toEqual(RGBA.fromHex("#006699"))
   for (const view of ["After", "Before", "Diff"]) expect(f.captureCharFrame()).toContain(view)
-  expect(f.captureCharFrame()).toContain("v select · tab switch view · s prompt")
+  expect(f.captureCharFrame()).toContain("v select · / search · tab switch view · s prompt")
   expect(f.reader().plainText.includes('const text = "old";')).toBe(diffView !== "after")
   expect(f.reader().plainText.includes('const text = "你好 👩‍💻";')).toBe(diffView !== "before")
   expect(f.reader().plainText).not.toContain("@@")
@@ -81,7 +81,7 @@ test("change views scroll through excerpts, copy without signs and preserve per-
 
 test("change shortcuts can be remapped while Tab passes through", async () => {
   const f = await mount(change(), { keymaps: { session: { "<Tab>": "passthrough", "<C-w>w": "switch-panel" } } })
-  expect(f.captureCharFrame()).toContain("v select · <C-w>w switch view · s prompt")
+  expect(f.captureCharFrame()).toContain("v select · / search · <C-w>w switch view · s prompt")
   expect(f.captureCharFrame()).not.toContain("tab switch view")
   const original = f.reader()
   let tabs = 0
@@ -100,7 +100,7 @@ test("change shortcuts can be remapped while Tab passes through", async () => {
 
 test("change views remain clickable when keyboard cycling is disabled", async () => {
   const f = await mount(change(), { keymaps: { session: { "<Tab>": "passthrough" } } })
-  expect(f.captureCharFrame()).toContain("v select · s prompt")
+  expect(f.captureCharFrame()).toContain("v select · / search · s prompt")
   expect(f.captureCharFrame()).not.toContain("switch view")
   await f.keys("v")
   const tab = f.renderer.root.findDescendantById("vim-change-view-diff")!
