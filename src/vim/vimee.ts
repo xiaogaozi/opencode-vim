@@ -60,10 +60,21 @@ export const YANK_FLASH_MS = 250
 
 export type VimeeAdapter = ReturnType<typeof createVimeeAdapter>
 
+// OpenCode 2.1 compares the prompt-history cursor with display width, while
+// 2.0 compared it with the character length.
+export function historyCursorMode(version: string): "char" | "display" {
+  const match = /^(\d+)\.(\d+)/.exec(version)
+  if (!match) return "char"
+  const major = Number(match[1])
+  const minor = Number(match[2])
+  return major > 2 || (major === 2 && minor >= 1) ? "display" : "char"
+}
+
 type AdapterOptions = {
   readOnly?: boolean
   onYank?: (text: string) => void
   readClipboard?: () => Promise<string>
+  historyCursor?: "char" | "display"
 }
 
 export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimLog, options: AdapterOptions = {}) {
@@ -139,7 +150,7 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
         ? defaultHistoryCommand(vimeeKey, text, historyText, defaultHistoryKeys)
         : undefined
       if (historyCommand) {
-        const result = dispatchCommand(historyCommand, ctx)
+        const result = dispatchCommand(historyCommand, ctx, options.historyCursor)
         historyText = result.ok ? ctx.input()?.plainText : undefined
         state.setPending("")
         updateTimeout(ctx)
@@ -420,7 +431,7 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
           break
         case "command":
           if (nextMode !== undefined) syncMode(state, nextMode)
-          dispatchCommand(action.command, ctx)
+          dispatchCommand(action.command, ctx, options.historyCursor)
           return
       }
     }
@@ -512,7 +523,7 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
     if (step.startsWith("command:")) {
       const command = step.slice("command:".length).trim()
       actions.push({ type: "command", command } as HostAction)
-      dispatchCommand(command, ctx)
+      dispatchCommand(command, ctx, options.historyCursor)
       return map
     }
     if (step.startsWith("agent:")) {
@@ -664,7 +675,7 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
         ctx.submit()
         return true
       case "command":
-        dispatchCommand((definition as HostKeybindDefinition).command!, ctx)
+        dispatchCommand((definition as HostKeybindDefinition).command!, ctx, options.historyCursor)
         return true
       default:
         return false
@@ -1351,15 +1362,17 @@ function clampNormalCursor(input: EditorInput, map: PromptMap) {
   }
 }
 
-function dispatchCommand(command: string, ctx: EditorContext) {
+function dispatchCommand(command: string, ctx: EditorContext, historyCursor: "char" | "display" = "char") {
   const input = ctx.input()
   if (command === "prompt.history.previous" && input) input.cursorOffset = 0
-  if (command === "prompt.history.next" && input) input.cursorOffset = input.plainText.length
+  if (command === "prompt.history.next" && input)
+    input.cursorOffset =
+      historyCursor === "display" ? displayWidth(input.plainText, ctx.widthMethod) : input.plainText.length
 
   const result = ctx.dispatchCommand(command)
 
-  // The host currently checks history-next using character length, then leaves
-  // the cursor in that unit. Restore the display-width offset after dispatch.
+  // History-next leaves the cursor in the unit the host checked. Restore the
+  // display-width offset the editor expects after dispatch.
   if (command !== "prompt.history.next" || !result.ok) return result
   const nextInput = ctx.input()
   if (nextInput) nextInput.cursorOffset = displayWidth(nextInput.plainText, ctx.widthMethod)
