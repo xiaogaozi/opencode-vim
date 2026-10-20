@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { EditBuffer } from "@opentui/core"
+import { createTestRenderer } from "@opentui/core/testing"
 import { createGraphemeCodec } from "../../src/vim/graphemes"
 import {
   charToDisplay,
@@ -14,10 +15,11 @@ import {
 } from "../../src/vim/map"
 
 describe("vim display offsets", () => {
-  test.each(["unicode", "wcwidth", "unicode-wide"] as const)("matches OpenTUI's %s offsets", (method) => {
+  test.each(["unicode", "wcwidth", "unicode-wide"] as const)("matches OpenTUI's %s offsets", async (method) => {
     const lines = ["你好 👩‍💻", "👨‍👩‍👧‍👦", "e\u0301\tend", "x·Ω", "last"]
     const text = lines.join("\n")
-    const buffer = EditBuffer.create(method)
+    const screen = await createTestRenderer({ width: 1, height: 1 })
+    const buffer = EditBuffer.create(method, screen.renderer.nativeScene)
     try {
       buffer.setText(text)
       const map = createPromptMap(text, undefined, method)
@@ -31,6 +33,7 @@ describe("vim display offsets", () => {
       }
     } finally {
       buffer.destroy()
+      screen.renderer.destroy()
     }
   })
   test("maps ASCII and CJK offsets", () => {
