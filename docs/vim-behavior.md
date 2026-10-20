@@ -59,21 +59,43 @@ Visible items are highlighted in place; off-screen items scroll into view.
 | --- | --- |
 | `j`, `k`, Down, Up | Next / previous item; counts work too |
 | `gg`, `G` | First / last item |
+| `/`, `?` | Search forward / backward through the transcript |
+| `n`, `N` | Next / previous search match; counts work too |
 | `Enter` | Expand/collapse a group, or open an item in a read-only modal |
 | `yy` | Copy selected text; groups copy their summary |
 | `Ctrl+d`, `Ctrl+u` | Scroll down / up |
 | `Ctrl+f`, `Ctrl+b`, Page Down, Page Up | Scroll by larger steps |
-| `Esc`, `Ctrl+[` | Return to the prompt |
+| `Esc`, `Ctrl+[` | Clear an active search result, then return to the prompt |
 | `s` | Return to the prompt |
+
+Search is literal and uses smartcase: an all-lowercase pattern ignores case,
+while a pattern containing an uppercase letter is case-sensitive. Search starts
+with the currently loaded transcript around the cursor, not the whole session.
+`?`, `n`, and `N` progressively load older history page by page when the current
+region runs out of matches, so the first search stays fast on long sessions.
+Matches wrap within the region loaded so far, and `Esc` cancels loading or
+clearing. All matches are highlighted, with the current match shown more
+prominently. Matches containing wide characters use a foreground highlight so
+full-width glyphs are not clipped at the cell boundary.
+
+The footer count includes matches found in the loaded region; a trailing `+`
+means older history is still unsearched and the count can grow as more pages are
+loaded. `Esc` while a result is shown clears the highlights but stays in session
+mode; press it again to return to the prompt. `n` and `N` still reuse the last
+pattern after clearing the result. Messages that arrive later are included by
+searching again.
 
 A collapsed group is one stop. Expand it to navigate its individual tools or
 reasoning blocks. Tool items expose their displayed details; text items preserve
 their Markdown.
 
 Inside the modal, use Vim motions to move, `v` or `V` to select, and `y` to copy.
-`Esc` cancels a selection or pending motion, then closes the modal. From its normal
-mode, `s` returns directly to the prompt. The modal keeps a snapshot of the item
-while you read it, even if the response is still streaming.
+`/` and `?` search the focused section and `n`/`N` move between matches; `y`
+copies the current match. Search results use the text color instead of a
+background so wide characters stay fully covered. `Esc` first clears an active
+search result or selection, then closes the modal on the next press. From its
+normal mode, `s` returns directly to the prompt. The modal keeps a snapshot of
+the item while you read it, even if the response is still streaming.
 
 Session yanks go to both the clipboard and the shared fallback, so `p`
 pastes into the prompt. Yanks briefly highlight the copied text. Your prompt text,

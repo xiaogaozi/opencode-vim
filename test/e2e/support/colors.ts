@@ -99,3 +99,26 @@ export function yankFlashMatches(before: string, after: string, colors: { foregr
   }
   return painted
 }
+
+export function coloredRuns(ansi: string, colors: string[], channel: "foreground" | "background" = "background") {
+  const wanted = new Set(colors.map((color) => color.toLowerCase()))
+  const runs: string[] = []
+  let current = ""
+  for (const line of cells(ansi)) {
+    for (const cell of line) {
+      if (wanted.has(cell[channel].toLowerCase())) {
+        current += cell.text
+        continue
+      }
+      if (current) {
+        runs.push(current)
+        current = ""
+      }
+    }
+    if (current) {
+      runs.push(current)
+      current = ""
+    }
+  }
+  return runs
+}

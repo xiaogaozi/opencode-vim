@@ -19,11 +19,22 @@ export async function installOpenCode() {
     console.log(`OpenCode E2E version: ${version} (${configured})`)
     return { binary: configured, version }
   }
-  const release = await fetch("https://opencode.ai/update/api/latest/cli/npm", { signal: AbortSignal.timeout(30_000) })
-  if (!release.ok) throw new Error(`Could not resolve the latest OpenCode release: ${release.status}`)
-  const { version } = (await release.json()) as { version: string }
-  if (!/^2\.\d+\.\d+$/.test(version)) throw new Error(`Expected a stable OpenCode V2 release, received ${version}`)
-  console.log(`OpenCode E2E version: ${version} (latest stable)`)
+  const pinned = process.env.VIM_E2E_VERSION
+  let version: string
+  if (pinned) {
+    if (!/^2\.\d+\.\d+$/.test(pinned)) throw new Error(`Expected a stable OpenCode V2 release, received ${pinned}`)
+    version = pinned
+    console.log(`OpenCode E2E version: ${version} (pinned)`)
+  } else {
+    const release = await fetch("https://opencode.ai/update/api/latest/cli/npm", {
+      signal: AbortSignal.timeout(30_000),
+    })
+    if (!release.ok) throw new Error(`Could not resolve the latest OpenCode release: ${release.status}`)
+    const payload = (await release.json()) as { version: string }
+    version = payload.version
+    if (!/^2\.\d+\.\d+$/.test(version)) throw new Error(`Expected a stable OpenCode V2 release, received ${version}`)
+    console.log(`OpenCode E2E version: ${version} (latest stable)`)
+  }
   const architecture = process.arch === "x64" ? "x64-baseline" : "arm64"
   const target = `${process.platform}-${architecture}`
   const cache = path.resolve(import.meta.dir, "../../../node_modules/.cache/opencode")

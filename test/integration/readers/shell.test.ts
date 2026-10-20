@@ -20,7 +20,7 @@ test("shell readers separate command and output and preserve read-only Vim contr
     "Command",
     "Output",
     "printf output",
-    "v select · tab switch section · s prompt",
+    "v select · / search · tab switch section · s prompt",
   ]) {
     expect(f.captureCharFrame()).toContain(text)
   }
@@ -54,7 +54,7 @@ test.each(["", "v", "V"])("session keymaps remap panels and release Tab in reade
     keymaps: { session: { "<Tab>": "passthrough", "<C-w>w": "switch-panel" } },
   })
   const command = f.renderer.currentFocusedEditor as TextareaRenderable
-  expect(f.captureCharFrame()).toContain("v select · <C-w>w switch section · s prompt")
+  expect(f.captureCharFrame()).toContain("v select · / search · <C-w>w switch section · s prompt")
   expect(f.captureCharFrame()).not.toContain("tab switch")
   await f.keys(mode)
   const selection = command.getSelectedText()

@@ -21,7 +21,9 @@ export async function sessionKeymaps({ terminal }: Fixture) {
   await keys("Enter")
   await screen(
     "command",
-    (text) => readerContains(text, "captured stdout") && text.includes("v select · <C-w>w switch section · s prompt"),
+    (text) =>
+      readerContains(text, "captured stdout") &&
+      text.includes("v select · / search · <C-w>w switch section · s prompt"),
   )
   await keys("C-w", "w")
   await screen("output", (text) =>
@@ -70,7 +72,9 @@ export async function sessionAgentBinding({ terminal }: Fixture) {
   await keys("Enter")
   await screen(
     "reader",
-    (text) => readerContains(text, "captured stdout") && text.includes("v select · <C-w>w switch section · s prompt"),
+    (text) =>
+      readerContains(text, "captured stdout") &&
+      text.includes("v select · / search · <C-w>w switch section · s prompt"),
   )
   await keys("Tab")
   await type("w")

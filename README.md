@@ -23,7 +23,9 @@ Restart the terminal UI after updating to load the new version.
 Press `Esc` to enter normal mode and `i` to type again in insert mode.
 
 In a session, press `s` from normal mode to browse messages and tools. Use `j`/`k`
-to navigate, `Enter` to open an item, and `s` to return to the prompt.
+to navigate, `Enter` to open an item, and `s` to return to the prompt. Use `/` and
+`?` to search the transcript, `n`/`N` to move between matches, and the same keys
+inside a message reader.
 
 Subagent entries open the full saved response, with Vim navigation, selection,
 and copying. Background completion entries use the same reader.

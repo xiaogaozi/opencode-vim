@@ -103,7 +103,9 @@ export function sessionKeyConflict(key: string) {
 export async function emptySession({ terminal }: Fixture) {
   await terminal.keys("Escape")
   await terminal.type("s")
-  await terminal.screen("empty-session", (text) => text.includes("SESSION · Enter open · yy copy · s prompt"))
+  await terminal.screen("empty-session", (text) =>
+    text.includes("SESSION · Enter open · / search · yy copy · s prompt"),
+  )
   await terminal.type("k")
   await terminal.keys("Enter")
   await terminal.screen("empty-no-reader", (text) => text.includes("SESSION") && !text.includes("v select"))

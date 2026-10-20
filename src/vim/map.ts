@@ -4,11 +4,12 @@ import { createGraphemeCodec } from "./graphemes"
 
 const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" })
 
-function graphemeWidth(value: string, method: WidthMethod) {
-  // Textarea offsets count newlines as one position; Bun.stringWidth counts them as zero.
+function graphemeWidth(value: string, method: WidthMethod, newlineWidth = 1) {
+  // Textarea offsets count newlines as one position; text buffer ranges count
+  // them as zero. Bun.stringWidth counts both as zero.
   // OpenTUI's edit buffer gives tabs a fixed two-column width by default.
   if (value === "\t") return 2
-  if (value === "\n") return 1
+  if (value === "\n") return newlineWidth
   if (method === "wcwidth") {
     let width = 0
     for (const character of value) width += Bun.stringWidth(character)
@@ -17,12 +18,17 @@ function graphemeWidth(value: string, method: WidthMethod) {
   return Bun.stringWidth(value)
 }
 
-export function charToDisplay(text: string, charIndex: number, method: WidthMethod = "unicode"): number {
+export function charToDisplay(
+  text: string,
+  charIndex: number,
+  method: WidthMethod = "unicode",
+  newlineWidth = 1,
+): number {
   let width = 0
   const limit = Math.max(0, Math.min(charIndex, text.length))
   for (const part of graphemes.segment(text)) {
     if (part.index + part.segment.length > limit) break
-    width += graphemeWidth(part.segment, method)
+    width += graphemeWidth(part.segment, method, newlineWidth)
   }
   return width
 }
