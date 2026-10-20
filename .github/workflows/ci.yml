@@ -95,17 +95,15 @@ jobs:
           path: |
             node_modules/.cache/opencode
             node_modules/.cache/neovim
-          key: e2e-binaries-${{ runner.os }}-${{ runner.arch }}-2.0.32-${{ hashFiles('test/e2e/support/opencode.ts', 'test/helpers/neovim.ts') }}-${{ github.sha }}
+          key: e2e-binaries-${{ runner.os }}-${{ runner.arch }}-2.1.1-${{ hashFiles('test/e2e/support/opencode.ts', 'test/helpers/neovim.ts') }}-${{ github.sha }}
           restore-keys: |
-            e2e-binaries-${{ runner.os }}-${{ runner.arch }}-2.0.32-${{ hashFiles('test/e2e/support/opencode.ts', 'test/helpers/neovim.ts') }}-
+            e2e-binaries-${{ runner.os }}-${{ runner.arch }}-2.1.1-${{ hashFiles('test/e2e/support/opencode.ts', 'test/helpers/neovim.ts') }}-
 
       - name: Test source and npm package in OpenCode
         env:
           E2E_WORKERS: "2"
           E2E_SHARD: ${{ matrix.shard }}/4
-          # OpenCode 2.1 changes transcript rendering; keep CI on the last
-          # validated stable until the E2E suite is updated for it.
-          VIM_E2E_VERSION: "2.0.32"
+          VIM_E2E_VERSION: "2.1.1"
         run: bun run test:e2e
 
       - name: Upload timings
