@@ -10,6 +10,7 @@ import {
   type Renderable,
 } from "@opentui/core"
 import { charToDisplay } from "./vim/map"
+import { createSyntaxStyle } from "./vim/syntax"
 import { transcriptItems, type TranscriptRange } from "./transcript-items"
 import { isWideText, literalMatches, type SearchDirection, type SearchMatch } from "./ui/search"
 
@@ -302,7 +303,7 @@ export function createTranscriptSelection(
       try {
         let syntax = buffer.getSyntaxStyle()
         if (!syntax) {
-          fallbackSyntax ??= SyntaxStyle.create()
+          fallbackSyntax ??= createSyntaxStyle(context)
           buffer.setSyntaxStyle?.(fallbackSyntax)
           syntax = fallbackSyntax
         }
