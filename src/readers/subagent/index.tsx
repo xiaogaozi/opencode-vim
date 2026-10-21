@@ -1,6 +1,7 @@
 /** @jsxImportSource @opentui/solid */
-import { Show } from "solid-js"
+import { onCleanup, Show } from "solid-js"
 import { subagentSnapshot, type SubagentSource } from "./data"
+import { createReaderSyntax, highlightCode } from "../syntax"
 import { TextReader } from "../text"
 import type { ReaderProps } from "../types"
 
@@ -12,6 +13,9 @@ export function SubagentReader(props: ReaderProps & { source: SubagentSource }) 
       : []
   const snapshot = subagentSnapshot(source, messages)
   const theme = () => props.context.theme.surface("dialog")
+  const syntax = createReaderSyntax(props.context)
+  const controller = new AbortController()
+  onCleanup(() => controller.abort())
   return (
     <TextReader
       {...props}
@@ -19,6 +23,9 @@ export function SubagentReader(props: ReaderProps & { source: SubagentSource }) 
       label="Response"
       status={snapshot.status}
       text={snapshot.response}
+      highlight={(input) => {
+        void highlightCode(input, syntax, "markdown", controller.signal, props.context.renderer.widthMethod)
+      }}
       details={
         <Show when={snapshot.description}>
           <box paddingLeft={2} paddingRight={2}>

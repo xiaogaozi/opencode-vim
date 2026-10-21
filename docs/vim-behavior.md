@@ -87,7 +87,9 @@ searching again.
 
 A collapsed group is one stop. Expand it to navigate its individual tools or
 reasoning blocks. Tool items expose their displayed details; text items preserve
-their Markdown.
+their Markdown. Message text is syntax-highlighted as Markdown, including fenced
+code blocks, while the markers stay visible so motions, search, and yanks keep
+using the source text.
 
 Inside the modal, use Vim motions to move, `v` or `V` to select, and `y` to copy.
 `/` and `?` search the focused section and `n`/`N` move between matches; `y`
