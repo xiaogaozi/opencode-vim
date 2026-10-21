@@ -22,7 +22,7 @@ export function ReadReader(props: ReaderProps & { snapshot: ReadSnapshot }) {
       label={data.end ? `Lines ${data.start}–${data.end}` : "Empty file"}
       status={data.clipped ? "Partial file · Long lines truncated" : data.partial ? "Partial file" : undefined}
       firstLine={data.end ? data.start : undefined}
-      maxHeight={Math.max(1, Math.min(30, dimensions().height - 8))}
+      maxHeight={Math.max(1, Math.min(40, dimensions().height - 8))}
       highlight={(input) => {
         if (filetype) void highlightCode(input, syntax, filetype, controller.signal, props.context.renderer.widthMethod)
       }}
