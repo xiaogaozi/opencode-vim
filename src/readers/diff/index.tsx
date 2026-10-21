@@ -66,7 +66,7 @@ export function DiffReader(props: ReaderProps & { snapshot: DiffSnapshot }) {
               switchLabel="switch view"
               label={`${title}${range}`}
               status={`${data.status === "added" ? "Added" : data.status === "deleted" ? "Deleted" : "Modified"} · +${data.additions} −${data.deletions}`}
-              maxHeight={Math.max(1, Math.min(30, dimensions().height - 12))}
+              maxHeight={Math.max(1, Math.min(36, dimensions().height - 10))}
               gutter={{
                 lineNumbers: content.numbers,
                 lineSigns: signs,

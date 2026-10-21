@@ -5,7 +5,7 @@ const mount = useReaderFixture()
 
 test("reader selects and copies characters and lines, and remembers its cursor", async () => {
   const f = await mount(textItem("one two\nsecond line"))
-  expect(f.setDialog).toHaveBeenCalledWith({ size: "large", centered: true })
+  expect(f.setDialog).toHaveBeenCalledWith({ size: "xlarge", centered: true })
   expect(f.reader().showCursor).toBe(true)
   await f.keys("wvll")
   expect(f.reader().getSelectedText()).toBe("two")
