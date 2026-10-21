@@ -5,7 +5,21 @@ import { createVimConfig, type VimOptions } from "../../src/vim/config"
 import type { VimLog } from "../../src/vim/log"
 import { createVimState, type VimMode } from "../../src/vim/state"
 import { displayToChar, displayWidth } from "../../src/vim/map"
-import { createVimeeAdapter } from "../../src/vim/vimee"
+import { createVimeeAdapter, historyCursorMode } from "../../src/vim/vimee"
+
+describe("vim host compatibility", () => {
+  test("uses character history cursors before OpenCode 2.1", () => {
+    expect(historyCursorMode("2.0.32")).toBe("char")
+    expect(historyCursorMode("1.19.3")).toBe("char")
+    expect(historyCursorMode("unknown")).toBe("char")
+  })
+
+  test("uses display-width history cursors from OpenCode 2.1", () => {
+    expect(historyCursorMode("2.1.0")).toBe("display")
+    expect(historyCursorMode("2.1.1")).toBe("display")
+    expect(historyCursorMode("3.0.0")).toBe("display")
+  })
+})
 
 describe("vim command keymaps", () => {
   test("dispatches commands in insert mode", () => {

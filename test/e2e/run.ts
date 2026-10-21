@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process"
-import { mkdir, mkdtemp, rm } from "node:fs/promises"
+import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises"
 import { availableParallelism } from "node:os"
 import path from "node:path"
 import { runWithFixture, type Fixture, type FixtureSetup, type FixtureTimings } from "./support/fixture"
@@ -429,7 +429,7 @@ const requested = Bun.argv.slice(2)
 for (const name of requested) {
   if (!scenarios.some((scenario) => scenario.name === name)) throw new Error(`Unknown E2E scenario: ${name}`)
 }
-const workers = Number(process.env.E2E_WORKERS ?? Math.min(4, availableParallelism()))
+const workers = Number(process.env.E2E_WORKERS ?? Math.min(2, availableParallelism()))
 if (!Number.isSafeInteger(workers) || workers < 1) throw new Error("E2E_WORKERS must be a positive integer")
 const shard = process.env.E2E_SHARD?.match(/^(\d+)\/(\d+)$/)
 if (process.env.E2E_SHARD && (!shard || Number(shard[1]) < 1 || Number(shard[1]) > Number(shard[2])))
@@ -445,7 +445,9 @@ const output = path.join(root, "test-results/e2e")
 await mkdir(output, { recursive: true })
 const artifacts = await mkdtemp(path.join(output, "run-"))
 await mkdir("/tmp/opencode", { recursive: true })
-const temporary = await mkdtemp("/tmp/opencode/vim-e2e-")
+// macOS resolves /tmp to /private/tmp. OpenCode scopes shells by location, so
+// the server and TUI must receive the canonical workspace path.
+const temporary = await realpath(await mkdtemp("/tmp/opencode/vim-e2e-"))
 const results: Array<{
   name: string
   status: "passed" | "failed"

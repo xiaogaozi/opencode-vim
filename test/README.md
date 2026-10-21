@@ -87,9 +87,12 @@ because the editor has no public undo-group API. It wraps public methods, not
 private attachment state.
 
 The tracker assumes each changed edit adds one native history entry; `replaceText`
-also adds an entry for unchanged text. Native undo/redo move one entry, while
-`setText`, `clear`, and `clearHistory` reset history. Entries predating attachment
-retain native granularity because their Vim boundaries are unknown.
+also adds an entry for unchanged text. OpenTUI 0.6 records replacing a selection
+as a separate deletion followed by an insert, so `editInput` deletes the
+selection explicitly and the tracker counts both entries. Native undo/redo move
+one entry, while `setText`, `clear`, and `clearHistory` reset history. Entries
+predating attachment retain native granularity because their Vim boundaries are
+unknown.
 
 When updating OpenTUI, run the real-component history tests, Neovim parity tests
 (including exact cursor positions), and the real-host `native-history` scenario.
@@ -98,15 +101,16 @@ from grouping; registers are still text-only.
 
 ## E2E performance
 
-E2E runs up to four scenarios at a time, limited by available processors, after
-building and packing the plugin once. CI uses two workers to limit contention.
+E2E runs two scenarios at a time by default, after building and packing the
+plugin once. Set `E2E_WORKERS` to a higher number to benchmark a capable
+machine; CI keeps two workers to limit contention.
 Every scenario still gets its own server, workspace, configuration, and tmux
 session. Workers take the next scenario as soon as they finish, and a failure
 does not prevent the remaining scenarios from running.
 
 Use `E2E_WORKERS=1 bun run test:e2e` for sequential debugging, or set another
 positive worker count to benchmark your machine. More workers can overload
-small CI runners, so measure before increasing it.
+small CI runners and introduce timing flakes, so measure before increasing it.
 
 Each run saves `test-results/e2e/run-*/result.json` with total wall time, shared
 setup time, execution wall time, and per-scenario timings for preparation,
