@@ -9,7 +9,7 @@ import { SubagentReader } from "./subagent"
 import type { ReaderProps } from "./types"
 
 export function Reader(props: ReaderProps) {
-  props.context.ui.dialog.set({ size: "large", centered: true })
+  props.context.ui.dialog.set({ size: "xlarge", centered: true })
   const source = props.message.source
   if (
     (source?.type === "tool" && source.name === "subagent") ||

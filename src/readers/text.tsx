@@ -369,7 +369,7 @@ export function TextReader(
     if (state.mode() === "visual-line") return "VISUAL LINE"
     return ""
   }
-  const height = () => props.maxHeight ?? Math.max(1, Math.min(20, dimensions().height - 10))
+  const height = () => props.maxHeight ?? Math.max(1, Math.min(30, dimensions().height - 10))
   const editor = (
     <textarea
       id="vim-session-message"
