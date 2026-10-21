@@ -48,10 +48,12 @@ export function createNativeHistory(input: EditorInput) {
 
       const before = input.plainText
       const ownGroup = !pending
+      // OpenTUI 0.6 may not expose the deleted text until the following insert.
+      const removedSelection = name === "deleteSelectedText" && (input.hasSelection?.() ?? true)
       begin()
       const result = original.apply(target, args)
       // replaceText creates an undo entry even when its contents are unchanged.
-      if (input.plainText !== before || name === "replaceText" || name === "replaceTextOwned") {
+      if (input.plainText !== before || name === "replaceText" || name === "replaceTextOwned" || removedSelection) {
         for (let index = 0; index < changes.length; index++) {
           const change = changes[index]!
           if (change.after.position <= position) continue

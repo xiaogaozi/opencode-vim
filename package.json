@@ -9,7 +9,10 @@
     "url": "https://github.com/Tarquinen/opencode-vim"
   },
   "exports": {
-    "./tui": "./dist/tui.js"
+    ".": "./dist/server.js",
+    "./server": "./dist/server.js",
+    "./tui": "./dist/tui.js",
+    "./rpc": "./dist/rpc.js"
   },
   "scripts": {
     "build": "bun scripts/build.ts",
@@ -26,12 +29,13 @@
     "diff": "^9.0.0"
   },
   "peerDependencies": {
-    "@opencode/plugin": "2.3.2",
+    "@opencode/plugin": ">=2.3.2 <3",
     "@opentui/core": ">=0.8.4",
     "@opentui/solid": ">=0.8.4",
     "solid-js": ">=1.9.0"
   },
   "devDependencies": {
+    "@opencode/plugin": "2.3.2",
     "@opencode/theme": "2.3.2",
     "@opentui/core": "0.8.4",
     "@opentui/solid": "0.8.4",

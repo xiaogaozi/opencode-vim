@@ -14,7 +14,7 @@ import {
 } from "../../src/vim/map"
 
 describe("vim display offsets", () => {
-  test.each(["unicode", "wcwidth", "unicode-wide"] as const)("matches OpenTUI's %s offsets", (method) => {
+  test.each(["unicode", "wcwidth", "unicode-wide"] as const)("matches OpenTUI's %s offsets", async (method) => {
     const lines = ["你好 👩‍💻", "👨‍👩‍👧‍👦", "e\u0301\tend", "x·Ω", "last"]
     const text = lines.join("\n")
     const owner = new ResourceContext({ objectCapacity: 16, renderCellsMax: 1024 })

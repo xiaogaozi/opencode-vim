@@ -47,6 +47,8 @@ export async function promptClipboard({ terminal }: Fixture) {
   await screen("seed-register", () => terminal.clipboard() === "A")
   await type("i")
   await keys("C-c", "Escape")
+  // Wait for the cancelled insert to settle before exercising the async queue.
+  await screen("queued-input-ready", (text) => promptLine(text, terminal.cursor().y) === "")
   // One input batch exercises the plugin's async queue, including native paste.
   await type("ppiB\x1b[200~C\x1b[201~")
   await screen(

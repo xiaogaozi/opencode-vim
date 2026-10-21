@@ -86,6 +86,18 @@ export function createTerminal(socket: string, artifacts: string) {
     await keys("-l", `\x1b[200~${text}\x1b[201~`)
   }
 
+  // Wait for host-driven scrolling and transitions to stop changing the pane.
+  async function settle(timeout = 2_000) {
+    const deadline = Date.now() + timeout
+    let previous = ""
+    while (Date.now() < deadline) {
+      const current = tmux("capture-pane", "-p", "-t", "e2e")
+      if (current === previous) return
+      previous = current
+      await Bun.sleep(50)
+    }
+  }
+
   function resize(width: number, height: number) {
     tmux("resize-window", "-t", "e2e", "-x", String(width), "-y", String(height))
   }
@@ -133,5 +145,5 @@ export function createTerminal(socket: string, artifacts: string) {
     }
   }
 
-  return { start, stop, keys, type, screen, cursor, cursorStyle, click, paste, resize, clipboard }
+  return { start, stop, keys, type, screen, cursor, cursorStyle, click, paste, settle, resize, clipboard }
 }

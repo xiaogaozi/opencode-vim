@@ -10,7 +10,7 @@ import { keyNotation } from "./vim/keys"
 import { createVimLog } from "./vim/log"
 import { charToDisplay, displayToChar } from "./vim/map"
 import { createVimState, type VimMode } from "./vim/state"
-import { createVimeeAdapter } from "./vim/vimee"
+import { createVimeeAdapter, historyCursorMode } from "./vim/vimee"
 import { VimStatus } from "./vim/status"
 import { SESSION_MODE, createSessionMode } from "./ui/session"
 import { createVimClipboard } from "./clipboard"
@@ -40,10 +40,11 @@ function VimHost(props: { context: Context }) {
     },
     readClipboard: clipboard.read,
   }
+  const historyCursor = historyCursorMode(props.context.app.version)
   const state = createVimState(config.defaultMode, log)
-  const vimee = createVimeeAdapter(state, config, log, clipboardOptions)
+  const vimee = createVimeeAdapter(state, config, log, { ...clipboardOptions, historyCursor })
   const dialogState = createVimState(config.defaultMode, log)
-  const dialogVimee = createVimeeAdapter(dialogState, config, log, clipboardOptions)
+  const dialogVimee = createVimeeAdapter(dialogState, config, log, { ...clipboardOptions, historyCursor })
   const [dialogFocused, setDialogFocused] = createSignal(false)
   const promptVim = { state, vimee }
   const dialogVim = { state: dialogState, vimee: dialogVimee }
