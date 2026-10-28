@@ -28,6 +28,10 @@ export type EditorInput = {
   redo?: () => boolean
   hasSelection?: () => boolean
   visualCursor?: { visualCol: number }
+  /** Viewport top in visual rows, for H/M/L screen motions. */
+  scrollY?: number
+  /** Visible editor height in rows, for H/M/L screen motions. */
+  height?: number
   editorView?: {
     getLogicalLineInfo?: () => LineInfo
     setSelection?: (start: number, end: number, bgColor?: RGBA, fgColor?: RGBA) => void
