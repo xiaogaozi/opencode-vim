@@ -22,6 +22,10 @@ Restart the terminal UI after updating to load the new version.
 
 Press `Esc` to enter normal mode and `i` to type again in insert mode.
 
+Markdown list markers continue automatically on OpenCode's newline shortcuts and
+on `o`/`O`, including renumbering following same-level ordered items. Disable
+this with `options.vim.listContinuation.enabled`.
+
 In a session, press `s` from normal mode to browse messages and tools. Use `j`/`k`
 to navigate, `Enter` to open an item, and `s` to return to the prompt. Use `/` and
 `?` to search the transcript, `n`/`N` to move between matches, and the same keys

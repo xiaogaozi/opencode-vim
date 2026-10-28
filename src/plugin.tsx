@@ -42,7 +42,11 @@ function VimHost(props: { context: Context }) {
   }
   const historyCursor = historyCursorMode(props.context.app.version)
   const state = createVimState(config.defaultMode, log)
-  const vimee = createVimeeAdapter(state, config, log, { ...clipboardOptions, historyCursor })
+  const vimee = createVimeeAdapter(state, config, log, {
+    ...clipboardOptions,
+    historyCursor,
+    listContinuation: config.listContinuation.enabled,
+  })
   const dialogState = createVimState(config.defaultMode, log)
   const dialogVimee = createVimeeAdapter(dialogState, config, log, { ...clipboardOptions, historyCursor })
   const [dialogFocused, setDialogFocused] = createSignal(false)
