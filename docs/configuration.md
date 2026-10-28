@@ -34,6 +34,7 @@ All options below belong inside `options.vim`.
 | `keymapTimeout` | `500` | Milliseconds to wait for the rest of a custom mapping |
 | `keymaps` | `{}` | Custom mappings, grouped by mode; values may be action chains |
 | `whichKey` | disabled | Pending-keymap popup listing the available shortcuts; see below |
+| `listContinuation` | enabled | Continue Markdown list markers on prompt newlines and `o`/`O`; see below |
 | `cursorStyles` | See below | Cursor appearance for each editing mode |
 | `inputSource` | disabled | Switch the OS input method per editing mode; see below |
 | `inline` | disabled | Double-space inline English region; see below |
@@ -90,6 +91,36 @@ While `whichKey` is enabled, a pending editing mapping no longer times out: it
 stays open until the next key. An unmatched key still falls through to the
 editor, and an insert-mode mapping still inserts its pending characters first.
 Disable `whichKey` to restore `keymapTimeout`.
+
+### Markdown list continuation
+
+Enabled by default for the prompt. Pressing `Shift+Enter` (or another OpenCode
+newline shortcut: `Ctrl+Enter`, `Alt+Enter`, or `Ctrl+J`) on a Markdown list
+item starts the next item:
+
+- Unordered lists keep the same `-`, `*`, or `+` marker.
+- Ordered lists increment the number and keep the `.`/`)` delimiter and
+  leading-zero width.
+- Inserting in the middle of an ordered list increments the following
+  same-level items by one. Nested lists are skipped, and a blank line,
+  non-list line, dedent, or different list type stops the renumbering.
+- Indentation and spacing after the marker are preserved.
+- Task items (`- [ ]`, `- [x]`) continue as `- [ ] `.
+- Pressing newline on an empty item removes its marker and leaves the list.
+- List-looking lines inside fenced code blocks are ignored.
+
+In normal mode, `o` and `O` follow the same rules based on the line above the
+newly opened line. Plain `Enter` still submits the prompt. This behavior applies
+only to the prompt, not search dialogs, question forms, or other single-line
+inputs.
+
+Set `enabled` to `false` to stop inserting list markers:
+
+```json
+{
+  "listContinuation": { "enabled": false }
+}
+```
 
 ### Pane controls
 

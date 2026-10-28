@@ -31,7 +31,10 @@ export async function createFixture(
   await screen.renderOnce()
   const config = createVimConfig({ defaultMode: "normal", ...options })
   const state = createVimState(config.defaultMode)
-  const adapter = createVimeeAdapter(state, config, () => {}, adapterOptions)
+  const adapter = createVimeeAdapter(state, config, () => {}, {
+    ...adapterOptions,
+    listContinuation: adapterOptions.listContinuation ?? config.listContinuation.enabled,
+  })
   const commands: string[] = []
   let submissions = 0
   const context: EditorContext = {

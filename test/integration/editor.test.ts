@@ -6,7 +6,7 @@ import {
   compilePattern,
   detectContextLanguage,
 } from "../../src/vim/context"
-import { displayToChar } from "../../src/vim/map"
+import { displayToChar, displayWidth } from "../../src/vim/map"
 
 let fixture: Awaited<ReturnType<typeof createFixture>> | undefined
 afterEach(() => {
@@ -570,6 +570,197 @@ describe("real textarea Vim editing", () => {
     expect(fixture.input.plainText).toBe("b")
     await fixture.keys("u")
     expect(fixture.input.plainText).toBe("a\u0301b")
+  })
+})
+
+describe("markdown list continuation", () => {
+  test("continues an unordered list on Shift+Enter", async () => {
+    fixture = await createFixture("- one", { defaultMode: "insert" })
+    fixture.input.cursorOffset = displayWidth("- one")
+
+    fixture.mockInput.pressEnter({ shift: true })
+
+    expect(fixture.settled()).toBe(true)
+    expect(fixture.input.plainText).toBe("- one\n- ")
+    expect(fixture.input.cursorOffset).toBe(displayWidth("- one\n- "))
+  })
+
+  test("continues on Ctrl+Enter and Alt+Enter", async () => {
+    fixture = await createFixture("- one", { defaultMode: "insert" })
+    fixture.input.cursorOffset = displayWidth("- one")
+    fixture.mockInput.pressEnter({ ctrl: true })
+    expect(fixture.input.plainText).toBe("- one\n- ")
+
+    fixture.dispose()
+    fixture = await createFixture("- one", { defaultMode: "insert" })
+    fixture.input.cursorOffset = displayWidth("- one")
+    fixture.mockInput.pressEnter({ meta: true })
+    expect(fixture.input.plainText).toBe("- one\n- ")
+  })
+
+  test("continues on Ctrl+J", async () => {
+    fixture = await createFixture("- one", { defaultMode: "insert" })
+    fixture.input.cursorOffset = displayWidth("- one")
+
+    fixture.mockInput.pressKey("j", { ctrl: true })
+
+    expect(fixture.input.plainText).toBe("- one\n- ")
+  })
+
+  test("increments an ordered list", async () => {
+    fixture = await createFixture("1. one", { defaultMode: "insert" })
+    fixture.input.cursorOffset = displayWidth("1. one")
+
+    fixture.mockInput.pressEnter({ shift: true })
+
+    expect(fixture.input.plainText).toBe("1. one\n2. ")
+  })
+
+  test("renumbers following ordered items on Shift+Enter", async () => {
+    fixture = await createFixture("1. one\n2. two\n3. three", { defaultMode: "insert" })
+    fixture.input.cursorOffset = displayWidth("1. one\n2. two")
+
+    fixture.mockInput.pressEnter({ shift: true })
+
+    expect(fixture.input.plainText).toBe("1. one\n2. two\n3. \n4. three")
+    expect(fixture.input.cursorOffset).toBe(displayWidth("1. one\n2. two\n3. "))
+  })
+
+  test("renumbers following ordered items on o and O", async () => {
+    fixture = await createFixture("1. one\n2. two\n3. three")
+    fixture.input.cursorOffset = displayWidth("1. one\n2. two")
+    await fixture.keys("o")
+    expect(fixture.input.plainText).toBe("1. one\n2. two\n3. \n4. three")
+
+    fixture.dispose()
+    fixture = await createFixture("1. one\n2. two\n3. three")
+    fixture.input.cursorOffset = displayWidth("1. one\n2. two\n")
+    await fixture.keys("O")
+    expect(fixture.input.plainText).toBe("1. one\n2. two\n3. \n4. three")
+  })
+
+  test("renumbering skips nested ordered items", async () => {
+    fixture = await createFixture("1. one\n   1. child\n2. two\n3. three", { defaultMode: "insert" })
+    fixture.input.cursorOffset = displayWidth("1. one")
+
+    fixture.mockInput.pressEnter({ shift: true })
+
+    expect(fixture.input.plainText).toBe("1. one\n2. \n   1. child\n3. two\n4. three")
+  })
+
+  test("renumbering stops at a blank line", async () => {
+    fixture = await createFixture("1. one\n2. two\n\n3. three", { defaultMode: "insert" })
+    fixture.input.cursorOffset = displayWidth("1. one\n2. two")
+
+    fixture.mockInput.pressEnter({ shift: true })
+
+    expect(fixture.input.plainText).toBe("1. one\n2. two\n3. \n\n3. three")
+  })
+
+  test("renumbering preserves extmarks on later lines", async () => {
+    fixture = await createFixture("1. one\n2. two\n3. three", { defaultMode: "insert" })
+    const start = displayWidth("1. one\n2. two\n")
+    const end = displayWidth("1. one\n2. two\n3. three")
+    const id = fixture.input.extmarks.create({ start, end, virtual: true, data: "reference" })
+    fixture.input.cursorOffset = displayWidth("1. one\n2. two")
+
+    fixture.mockInput.pressEnter({ shift: true })
+
+    expect(fixture.input.plainText).toBe("1. one\n2. two\n3. \n4. three")
+    expect(fixture.input.extmarks.get(id)?.data).toBe("reference")
+  })
+
+  test("one undo reverts the inserted item and renumbering", async () => {
+    fixture = await createFixture("1. one\n2. two\n3. three", { defaultMode: "insert" })
+    fixture.input.cursorOffset = displayWidth("1. one\n2. two")
+    fixture.mockInput.pressEnter({ shift: true })
+    expect(fixture.input.plainText).toBe("1. one\n2. two\n3. \n4. three")
+
+    fixture.mockInput.pressEscape()
+    await fixture.keys("u")
+
+    expect(fixture.input.plainText).toBe("1. one\n2. two\n3. three")
+  })
+
+  test("continues a task list as unchecked", async () => {
+    fixture = await createFixture("- [x] done", { defaultMode: "insert" })
+    fixture.input.cursorOffset = displayWidth("- [x] done")
+
+    fixture.mockInput.pressEnter({ shift: true })
+
+    expect(fixture.input.plainText).toBe("- [x] done\n- [ ] ")
+  })
+
+  test("an empty item ends the list", async () => {
+    fixture = await createFixture("- item\n- ", { defaultMode: "insert" })
+    fixture.input.cursorOffset = displayWidth("- item\n- ")
+
+    fixture.mockInput.pressEnter({ shift: true })
+
+    expect(fixture.input.plainText).toBe("- item\n\n")
+    expect(fixture.input.cursorOffset).toBe(displayWidth("- item\n\n"))
+  })
+
+  test("normal-mode o continues the current line", async () => {
+    fixture = await createFixture("- one")
+    fixture.input.cursorOffset = displayWidth("- one")
+
+    await fixture.keys("o")
+
+    expect(fixture.input.plainText).toBe("- one\n- ")
+    expect(fixture.state.mode()).toBe("insert")
+  })
+
+  test("normal-mode O continues the line above", async () => {
+    fixture = await createFixture("- one\ntwo")
+    fixture.input.cursorOffset = displayWidth("- one\n")
+
+    await fixture.keys("O")
+
+    expect(fixture.input.plainText).toBe("- one\n- \ntwo")
+    expect(fixture.state.mode()).toBe("insert")
+  })
+
+  test("normal-mode o exits after an empty item", async () => {
+    fixture = await createFixture("- ")
+    fixture.input.cursorOffset = displayWidth("- ")
+
+    await fixture.keys("o")
+
+    expect(fixture.input.plainText).toBe("\n")
+  })
+
+  test("skips list markers inside fenced code", async () => {
+    fixture = await createFixture("```\n- item\n```", { defaultMode: "insert" })
+    fixture.input.cursorOffset = displayWidth("```\n- item")
+
+    fixture.mockInput.pressEnter({ shift: true })
+
+    expect(fixture.settled()).toBe(false)
+  })
+
+  test("can be disabled in configuration", async () => {
+    fixture = await createFixture("- one", {
+      defaultMode: "insert",
+      listContinuation: { enabled: false },
+    })
+    fixture.input.cursorOffset = displayWidth("- one")
+
+    fixture.mockInput.pressEnter({ shift: true })
+
+    expect(fixture.settled()).toBe(false)
+  })
+
+  test("one undo removes the newline and prefix", async () => {
+    fixture = await createFixture("- one", { defaultMode: "insert" })
+    fixture.input.cursorOffset = displayWidth("- one")
+    fixture.mockInput.pressEnter({ shift: true })
+    expect(fixture.input.plainText).toBe("- one\n- ")
+
+    fixture.mockInput.pressEscape()
+    await fixture.keys("u")
+
+    expect(fixture.input.plainText).toBe("- one")
   })
 })
 

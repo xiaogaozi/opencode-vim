@@ -30,6 +30,15 @@ use actual newline-separated lines. Bare `j`/`k` follow wrapped rows, as in
 LazyVim; counts such as `3j` and operator motions such as `dj` use actual lines.
 `gj`/`gk` always follow wrapped rows, including with counts.
 
+Markdown lists continue automatically when `listContinuation` is enabled. On a
+list item, OpenCode's newline shortcuts (`Shift+Enter`, `Ctrl+Enter`,
+`Alt+Enter`, `Ctrl+J`) insert the next marker and `o`/`O` do the same for the
+line above the newly opened line. Ordered numbers increment, task items continue
+unchecked, and an empty item ends the list. Inserting in the middle of an
+ordered list also increments the following same-level items, while nested lists
+and lists after a blank line keep their numbering. See
+[Configuration](./configuration.md#markdown-list-continuation) to disable it.
+
 Text objects include words and quotes, plus `iq`/`aq` for the nearest quote pair,
 `ip`/`ap` for paragraphs, and `ib`/`ab` or `iB`/`aB` for parentheses or braces.
 
