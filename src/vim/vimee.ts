@@ -38,6 +38,7 @@ import {
   vimOffsetFromPosition,
   type PromptMap,
 } from "./map"
+import { screenMotionCursor, screenMotionKey } from "./screen-motion"
 import type { createVimState, VimMode } from "./state"
 import {
   executeTextObject,
@@ -240,6 +241,11 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
       return finish()
 
       function finish(): boolean | Promise<boolean> {
+        // Reader screen motions work on visual rows because its text wraps.
+        const screenTarget =
+          options.readOnly && resolved?.status !== "matched" && vim.phase === "idle" && screenMotionKey(commandKey)
+            ? screenMotionCursor(input, map, commandKey, vim.count, widthMethod)
+            : undefined
         let result
         if (resolved?.status === "matched") {
           const steps = chainSteps(resolved.definition)
@@ -259,7 +265,8 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
           }
           result = processKey(commandKey, event.ctrl)
         }
-        vim = result.newCtx
+        vim = screenTarget ? { ...result.newCtx, cursor: screenTarget } : result.newCtx
+        if (screenTarget) preferredColumn = undefined
         const actions = result.actions as HostAction[]
         if (resolved?.status !== "matched") applyActions(actions, ctx, activeMap)
         if (opensLine && vim.mode === "insert") continueOpenedListLine(ctx)
@@ -1351,6 +1358,7 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
 function readOnlyKey(key: string, ctrl: boolean, vim: VimContext) {
   if (key === "Escape") return true
   if (ctrl) return false
+  if (screenMotionKey(key)) return vim.phase === "idle"
   if (vim.phase === "char-pending" || vim.phase === "text-object-pending" || vim.phase === "register-pending")
     return true
   if (vim.phase === "g-pending") return ["g", "j", "k", "0", "^", "$", "ArrowDown", "ArrowUp"].includes(key)
