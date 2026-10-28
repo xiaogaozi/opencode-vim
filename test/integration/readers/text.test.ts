@@ -207,6 +207,53 @@ test("paging and resizing retain text and the remembered position", async () => 
   expect(f.reader().cursorOffset).toBeLessThan(offset)
 })
 
+test("H, M and L jump within the visible reader without scrolling", async () => {
+  const text = Array.from({ length: 100 }, (_, index) => `line ${index + 1}`).join("\n")
+  const f = await mount(textItem(text), {}, { width: 80, height: 24 })
+  const reader = f.reader()
+  await f.keys("50G")
+  const top = reader.scrollY
+  const height = reader.height
+  expect(top).toBeGreaterThan(0)
+  expect(top + height).toBeLessThan(100)
+
+  await f.keys("H")
+  expect(reader.scrollY).toBe(top)
+  expect(reader.visualCursor.visualRow).toBe(1)
+  await f.keys("M")
+  expect(reader.scrollY).toBe(top)
+  expect(reader.visualCursor.visualRow).toBe(Math.floor(height / 2))
+  await f.keys("L")
+  expect(reader.scrollY).toBe(top)
+  expect(reader.visualCursor.visualRow).toBe(height - 2)
+  await f.keys("2H")
+  expect(reader.scrollY).toBe(top)
+  expect(reader.visualCursor.visualRow).toBe(2)
+  await f.keys("2L")
+  expect(reader.scrollY).toBe(top)
+  expect(reader.visualCursor.visualRow).toBe(height - 3)
+})
+
+test("H and L extend visual selections within the visible reader", async () => {
+  const text = Array.from({ length: 100 }, (_, index) => `line ${index + 1}`).join("\n")
+  const f = await mount(textItem(text), {}, { width: 80, height: 24 })
+  const reader = f.reader()
+  await f.keys("50GM")
+  const top = reader.scrollY
+  const anchor = reader.cursorOffset
+
+  await f.keys("vL")
+  expect(reader.hasSelection()).toBe(true)
+  expect(reader.scrollY).toBe(top)
+  expect(reader.visualCursor.visualRow).toBe(reader.height - 2)
+  expect(reader.cursorOffset).toBeGreaterThan(anchor)
+
+  await f.keys("H")
+  expect(reader.scrollY).toBe(top)
+  expect(reader.visualCursor.visualRow).toBe(1)
+  expect(reader.cursorOffset).toBeLessThan(anchor)
+})
+
 test("Escape cancels selection before returning; close button and Ctrl+C request back", async () => {
   const f = await mount(textItem("one two three"))
   await f.keys("wv")

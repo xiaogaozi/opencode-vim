@@ -375,6 +375,8 @@ export function TextReader(
       id="vim-session-message"
       ref={(value: TextareaRenderable) => {
         output = value
+        // Screen motions keep the viewport fixed even at the first/last row.
+        output.editorView.setScrollMargin(0)
         output.handleKeyPress = () => true
         output.handlePaste = () => {}
       }}

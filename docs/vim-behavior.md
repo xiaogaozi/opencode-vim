@@ -101,6 +101,8 @@ code blocks, while the markers stay visible so motions, search, and yanks keep
 using the source text.
 
 Inside the modal, use Vim motions to move, `v` or `V` to select, and `y` to copy.
+`H`, `M`, and `L` jump to the top, middle, and bottom of the visible area;
+counts move one line further inward and the viewport stays in place.
 `/` and `?` search the focused section and `n`/`N` move between matches; `y`
 copies the current match. Search results use the text color instead of a
 background so wide characters stay fully covered. `Esc` first clears an active
