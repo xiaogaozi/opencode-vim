@@ -24,7 +24,9 @@ import {
   type HostKeybindDefinition,
 } from "./keymaps"
 import { keyForVimee, keyToken, tokenCtrl } from "./keys"
+import { inFencedCode, listLine, orderedLine, renumberOrderedSiblings } from "./lists"
 import {
+  charToDisplay,
   displayToChar,
   displayWidth,
   createPromptMap,
@@ -75,6 +77,8 @@ type AdapterOptions = {
   onYank?: (text: string) => void
   readClipboard?: () => Promise<string>
   historyCursor?: "char" | "display"
+  /** Continues Markdown list markers on prompt newlines and `o`/`O`. */
+  listContinuation?: boolean
 }
 
 export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimLog, options: AdapterOptions = {}) {
@@ -121,7 +125,12 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
       history?.begin()
 
       let vimeeKey = keyForVimee(event, key)
-      if (!vimeeKey) return false
+      if (!vimeeKey) {
+        if (options.listContinuation && !options.readOnly && state.mode() === "insert" && isNewlineKey(event)) {
+          if (continueMarkdownList(ctx)) return true
+        }
+        return false
+      }
       if (options.readOnly && !readOnlyKey(vimeeKey, event.ctrl, vim)) {
         vim = resetContext(vim)
         state.setPending("")
@@ -140,7 +149,11 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
           log("vimee.key", { key, mode: vim.mode, phase: vim.phase, cursor: vim.cursor, actions: ["mode-change"] })
           return true
         }
-        return handleInsertKeybind(event, vimeeKey, ctx)
+        const handled = handleInsertKeybind(event, vimeeKey, ctx)
+        if (handled) return handled
+        if (options.listContinuation && !options.readOnly && isNewlineKey(event) && continueMarkdownList(ctx))
+          return true
+        return false
       }
 
       const text = input.plainText
@@ -199,6 +212,15 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
       }
 
       const commandKey = vimeeKey
+      const opensLine =
+        options.listContinuation === true &&
+        !options.readOnly &&
+        state.mode() === "normal" &&
+        vim.phase === "idle" &&
+        vim.count === 0 &&
+        !wasPending &&
+        resolved?.status !== "matched" &&
+        (commandKey === "o" || commandKey === "O")
       const definition = resolved?.status === "matched" ? resolved.definition : undefined
       if (options.readClipboard && needsClipboard(commandKey, event.ctrl, definition)) {
         const before = generation
@@ -240,6 +262,7 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
         vim = result.newCtx
         const actions = result.actions as HostAction[]
         if (resolved?.status !== "matched") applyActions(actions, ctx, activeMap)
+        if (opensLine && vim.mode === "insert") continueOpenedListLine(ctx)
         return complete(actions)
 
         function complete(completed: HostAction[]): boolean {
@@ -601,6 +624,130 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
     const next = text.slice(0, offset) + value + text.slice(offset)
     ctx.setText(next)
     input.cursorOffset = displayWidth(next.slice(0, offset + value.length), widthMethod)
+  }
+
+  // Continues a Markdown list on an input newline (Shift+Enter and friends).
+  function continueMarkdownList(ctx: EditorContext) {
+    const input = ctx.input()
+    if (!input) return false
+    const map = mapForHostText(input.plainText)
+    const position = hostPosition(map, clamp(input.cursorOffset, 0, map.displayWidth))
+    const lines = map.vimText.split("\n")
+    if (inFencedCode(lines, position.line)) return false
+
+    const list = listLine(lines[position.line] ?? "")
+    if (!list || position.col < list.prefixLength) return false
+
+    if (list.empty) {
+      if (!removeListPrefix(ctx, input, map, position.line, list.prefixLength, true)) return false
+    } else {
+      insertLiteralText(ctx, "\n" + list.indent + list.next)
+      renumberFollowingOrderedItems(ctx)
+    }
+    syncListCursor(ctx)
+    return true
+  }
+
+  // Continues the line above after normal-mode `o`/`O` opens a blank one.
+  function continueOpenedListLine(ctx: EditorContext) {
+    const input = ctx.input()
+    if (!input) return false
+    const map = mapForHostText(input.plainText)
+    const position = hostPosition(map, clamp(input.cursorOffset, 0, map.displayWidth))
+    const lines = map.vimText.split("\n")
+    if ((lines[position.line] ?? "").trim() !== "") return false
+
+    const above = position.line - 1
+    if (above < 0 || inFencedCode(lines, above)) return false
+    const list = listLine(lines[above] ?? "")
+    if (!list) return false
+
+    if (list.empty) {
+      if (!removeListPrefix(ctx, input, map, above, list.prefixLength, false)) return false
+    } else {
+      const lineStart = map.lineStarts[position.line]!
+      const start = map.vimToHost[lineStart]!
+      const end = map.vimToHost[lineStart + vimLineLength(map, position.line)] ?? input.plainText.length
+      const text = input.plainText
+      const prefix = list.indent + list.next
+      const next = text.slice(0, start) + prefix + text.slice(end)
+      ctx.setText(next)
+      input.cursorOffset = charToDisplay(next, start + prefix.length, widthMethod)
+      renumberFollowingOrderedItems(ctx)
+    }
+    syncListCursor(ctx)
+    return true
+  }
+
+  /**
+   * Increments the sibling ordered items below the newly inserted one. Each
+   * number is replaced on its own so unrelated text and extmarks stay intact;
+   * the cursor is restored to the new item after the edits.
+   */
+  function renumberFollowingOrderedItems(ctx: EditorContext) {
+    const input = ctx.input()
+    if (!input) return
+
+    const map = mapForHostText(input.plainText)
+    const position = hostPosition(map, clamp(input.cursorOffset, 0, map.displayWidth))
+    const lines = input.plainText.split("\n")
+    const current = orderedLine(lines[position.line] ?? "")
+    if (!current) return
+
+    const edits = renumberOrderedSiblings(lines, position.line, current.indent, current.delimiter)
+    if (!edits.length) return
+
+    const cursor = input.cursorOffset
+    for (let index = edits.length - 1; index >= 0; index--) {
+      const edit = edits[index]!
+      const line = lines[edit.line]!
+      lines[edit.line] = line.slice(0, edit.start) + edit.value + line.slice(edit.end)
+      ctx.setText(lines.join("\n"))
+    }
+    input.cursorOffset = cursor
+  }
+
+  /**
+   * Removes a list prefix from `line`, keeping the cursor relative to the
+   * remaining text. With `newline`, a line break is inserted at the cursor so
+   * an empty item ends the list on the next line.
+   */
+  function removeListPrefix(
+    ctx: EditorContext,
+    input: EditorInput,
+    map: PromptMap,
+    line: number,
+    prefixLength: number,
+    newline: boolean,
+  ) {
+    const lineStart = map.lineStarts[line]
+    if (lineStart === undefined) return false
+    const start = map.vimToHost[lineStart]
+    const end = map.vimToHost[lineStart + prefixLength]
+    if (start === undefined || end === undefined || end < start) return false
+
+    const text = input.plainText
+    const cursor = hostCharOffset(map, input.cursorOffset)
+    const removed = end - start
+    const next = text.slice(0, start) + text.slice(end)
+
+    if (newline) {
+      const at = Math.max(0, Math.min(next.length, cursor - removed))
+      const result = next.slice(0, at) + "\n" + next.slice(at)
+      ctx.setText(result)
+      input.cursorOffset = charToDisplay(result, at + 1, widthMethod)
+    } else {
+      ctx.setText(next)
+      input.cursorOffset = charToDisplay(next, Math.max(0, cursor - removed), widthMethod)
+    }
+    return true
+  }
+
+  function syncListCursor(ctx: EditorContext) {
+    const input = ctx.input()
+    if (!input) return
+    const map = mapForHostText(input.plainText)
+    sync(hostPosition(map, clamp(input.cursorOffset, 0, map.displayWidth)))
   }
 
   function handleInsertKeybind(event: KeyEvent, key: string, ctx: EditorContext): boolean | Promise<boolean> {
@@ -1413,6 +1560,19 @@ function consumesKey(key: string, actions: HostAction[], ctx: VimContext, keybin
   if (keybindPending) return true
   if (ctx.phase !== "idle") return true
   return ctx.mode !== "insert" || key === "Escape"
+}
+
+/**
+ * OpenCode's default `input.newline` bindings: Shift/Ctrl/Alt+Enter and Ctrl+J.
+ * A bare Enter submits the prompt, so it is deliberately excluded.
+ */
+function isNewlineKey(event: KeyEvent) {
+  const name = event.name?.toLowerCase()
+  if (name === "linefeed") return true
+  if (name === "return" || name === "enter" || name === "kpenter") {
+    return !!(event.shift || event.ctrl || event.option || event.meta)
+  }
+  return event.ctrl === true && !event.option && !event.meta && name === "j"
 }
 
 function clamp(value: number, min: number, max: number) {
