@@ -1,8 +1,9 @@
 import type { Context } from "@opencode/plugin/tui/context"
-import { KeyEvent, PasteEvent, type CursorStyleOptions } from "@opentui/core"
+import { KeyEvent, PasteEvent } from "@opentui/core"
 import { createEffect, onCleanup, Show, untrack } from "solid-js"
 import type { EditorContext } from "../vim/editor"
 import type { VimConfig } from "../vim/config"
+import { createCursorStylePin } from "../vim/cursor"
 import { editInput } from "../vim/edit"
 import { keyNotation } from "../vim/keys"
 import type { VimLog } from "../vim/log"
@@ -16,7 +17,7 @@ export function createFormMode(context: Context, config: VimConfig, log: VimLog,
   const adapter = createVimeeAdapter(state, config, log)
   const active = () => enabled() && context.keymap.mode.current() === "form"
   let input: typeof context.renderer.currentFocusedEditor = null
-  let cursorStyle: CursorStyleOptions | undefined
+  const cursorPin = createCursorStylePin()
   let forwarding = false
   let opening: Array<KeyEvent | PasteEvent> | undefined
   const editorContext: EditorContext = {
@@ -70,8 +71,7 @@ export function createFormMode(context: Context, config: VimConfig, log: VimLog,
     untrack(focus)
   })
   createEffect(() => {
-    const style = config.cursorStyles[state.mode()]
-    if (input && !input.isDestroyed) input.cursorStyle = style
+    cursorPin.set(config.cursorStyles[state.mode()])
   })
   onCleanup(() => {
     opening = undefined
@@ -81,7 +81,7 @@ export function createFormMode(context: Context, config: VimConfig, log: VimLog,
   })
 
   function restoreCursor() {
-    if (input && !input.isDestroyed && cursorStyle) input.cursorStyle = cursorStyle
+    cursorPin.detach()
   }
 
   function focus() {
@@ -90,9 +90,9 @@ export function createFormMode(context: Context, config: VimConfig, log: VimLog,
     adapter.suspend()
     restoreCursor()
     input = next
-    cursorStyle = input?.cursorStyle
+    if (input) cursorPin.attach(input)
     state.setMode(input ? "insert" : "normal")
-    if (input) input.cursorStyle = config.cursorStyles[state.mode()]
+    if (input) cursorPin.set(config.cursorStyles[state.mode()])
   }
 
   function consume(event: KeyEvent | PasteEvent) {

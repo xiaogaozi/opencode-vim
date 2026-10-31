@@ -1,10 +1,11 @@
 /** @jsxImportSource @opentui/solid */
 import { Plugin } from "@opencode/plugin/tui"
 import type { Context } from "@opencode/plugin/tui/context"
-import { InputRenderable, KeyEvent, PasteEvent, RGBA, type CursorStyleOptions } from "@opentui/core"
+import { InputRenderable, KeyEvent, PasteEvent, RGBA } from "@opentui/core"
 import { createEffect, createSignal, onCleanup, untrack } from "solid-js"
 import type { EditorContext } from "./vim/editor"
 import { createVimConfig } from "./vim/config"
+import { createCursorStylePin } from "./vim/cursor"
 import { editInput } from "./vim/edit"
 import { keyNotation } from "./vim/keys"
 import { createVimLog } from "./vim/log"
@@ -60,7 +61,7 @@ function VimHost(props: { context: Context }) {
   let cursorMode = ""
   let cursorColor: string | undefined
   let cursorInput: typeof props.context.renderer.currentFocusedEditor = null
-  let originalCursorStyle: CursorStyleOptions | undefined
+  const cursorPin = createCursorStylePin()
   const session = createSessionMode(props.context, config, clipboard)
   const terminal = createTerminalControls(
     props.context,
@@ -391,17 +392,17 @@ function VimHost(props: { context: Context }) {
     if (inputChanged) {
       restoreCursor()
       cursorInput = input
-      originalCursorStyle = input.cursorStyle
+      cursorPin.attach(input)
     }
     syncCursorColor()
     if (!force && !inputChanged && cursorMode === mode) return
-    input.cursorStyle = config.cursorStyles[mode]
+    cursorPin.set(config.cursorStyles[mode])
     cursorMode = mode
     props.context.renderer.requestRender()
   }
 
   function restoreCursor() {
-    if (cursorInput && !cursorInput.isDestroyed && originalCursorStyle) cursorInput.cursorStyle = originalCursorStyle
+    cursorPin.detach()
     cursorInput = null
     cursorMode = ""
     if (cursorColor !== undefined) {
