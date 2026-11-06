@@ -225,7 +225,12 @@ automatically. Example configuration inside `options.vim`:
 - `pollInterval` in milliseconds (default `500`) re-reads the input source while
   editing, so manual switches (for example with `Ctrl+Space`) also update the
   footer indicator and cursor color and are remembered. Set it to `0` to disable
-  polling.
+  polling. When the plugin's server part is loaded (the default when the plugin
+  is listed in `opencode.json`), polling runs once in the OpenCode server and is
+  shared by every TUI session; opening more terminals does not increase helper
+  invocations. A TUI-only install (listed in `cli.json`) keeps a local poller as
+  a fallback. To enable the shared poller, list the plugin in `opencode.json`
+  instead of `cli.json`; the TUI part loads automatically.
 - `cursorColors.english` / `cursorColors.other` set the cursor color per active
   input source. An empty color restores the terminal default. Cursor color
   needs a terminal that supports `OSC 12` (iTerm2, kitty, WezTerm, Ghostty,

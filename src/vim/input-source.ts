@@ -1,7 +1,8 @@
-import { execFile } from "node:child_process"
 import { createSignal } from "solid-js"
 import type { Accessor } from "solid-js"
-import type { VimInputSource } from "./config"
+import type { VimInputSource } from "./input-source-config"
+import { buildSetTokens, readInputSource, resolveCommands } from "./input-source-command"
+export { splitCommand } from "./input-source-command"
 import type { ContextLanguage } from "./context"
 import { DEFAULT_ENGLISH_PATTERN, DEFAULT_OTHER_PATTERN, compilePattern, detectContextLanguage } from "./context"
 import type { VimLog } from "./log"
@@ -15,6 +16,11 @@ export type InsertContext = {
 export type InputSourceRunner = {
   get: () => Promise<string | undefined>
   set: (source: string) => Promise<void>
+}
+
+export type InputSourceRemote = {
+  get: () => Promise<string | undefined>
+  onChanged: (handler: (source: string) => void) => () => void
 }
 
 export type InputSourceController = {
@@ -31,6 +37,7 @@ export type InputSourceController = {
 export type InputSourceDeps = {
   log?: VimLog
   runner?: InputSourceRunner
+  remote?: InputSourceRemote
   notify?: (message: string) => void
   /** Delay before verifying a CJK switch; 0 disables the check (tests). */
   confirmDelayMs?: number
@@ -58,6 +65,9 @@ export function createInputSourceController(config: VimInputSource, deps: InputS
   let running: Promise<void> | undefined
   let initial: Promise<void> | undefined
   let pollTimer: ReturnType<typeof setInterval> | undefined
+  let unsubscribeRemote: (() => void) | undefined
+  let remoteDisabled = false
+  let remoteToken = 0
   let confirmTimer: ReturnType<typeof setTimeout> | undefined
   let applyToken = 0
   let notified = false
@@ -111,15 +121,66 @@ export function createInputSourceController(config: VimInputSource, deps: InputS
 
   function setActive(active: boolean) {
     if (!config.enabled || !runner || config.pollInterval <= 0) return
-    if (active === (pollTimer !== undefined)) return
-    if (active) {
-      pollTimer = setInterval(() => {
-        void poll()
-      }, config.pollInterval)
-    } else {
-      clearInterval(pollTimer)
-      pollTimer = undefined
+
+    if (deps.remote && !remoteDisabled) {
+      if (active === (unsubscribeRemote !== undefined)) return
+      if (active) {
+        const token = ++remoteToken
+        let off: (() => void) | undefined
+        try {
+          off = deps.remote.onChanged(onPolled)
+        } catch (error) {
+          fail("get", error)
+          remoteDisabled = true
+          startLocalPolling()
+          return
+        }
+        unsubscribeRemote = off
+        void deps.remote
+          .get()
+          .then((current) => {
+            if (token !== remoteToken) return
+            if (current) {
+              onPolled(current)
+              return
+            }
+            off?.()
+            unsubscribeRemote = undefined
+            remoteDisabled = true
+            startLocalPolling()
+          })
+          .catch((error) => {
+            if (token !== remoteToken) return
+            fail("get", error)
+            off?.()
+            unsubscribeRemote = undefined
+            remoteDisabled = true
+            startLocalPolling()
+          })
+      } else {
+        remoteToken++
+        unsubscribeRemote?.()
+        unsubscribeRemote = undefined
+      }
+      return
     }
+
+    if (active === (pollTimer !== undefined)) return
+    if (active) startLocalPolling()
+    else stopLocalPolling()
+  }
+
+  function startLocalPolling() {
+    if (pollTimer) return
+    pollTimer = setInterval(() => {
+      void poll()
+    }, config.pollInterval)
+  }
+
+  function stopLocalPolling() {
+    if (!pollTimer) return
+    clearInterval(pollTimer)
+    pollTimer = undefined
   }
 
   function reset() {
@@ -219,9 +280,25 @@ export function createInputSourceController(config: VimInputSource, deps: InputS
   }
 
   async function poll() {
-    const current = await readCurrent()
-    if (!current) return
+    if (deps.remote && !remoteDisabled) {
+      try {
+        const current = await deps.remote.get()
+        if (current) {
+          onPolled(current)
+          return
+        }
+        remoteDisabled = true
+      } catch (error) {
+        fail("get", error)
+        remoteDisabled = true
+      }
+    }
 
+    const current = await readCurrent()
+    if (current) onPolled(current)
+  }
+
+  function onPolled(current: string) {
     if (current !== source()) setCurrent(current)
     if (current !== config.normal) lastOther = current
   }
@@ -267,75 +344,15 @@ export function createInputSourceController(config: VimInputSource, deps: InputS
 }
 
 function createRunner(config: VimInputSource): InputSourceRunner | undefined {
-  const base = config.command ? splitCommand(config.command) : undefined
-  const getTokens = config.getCommand ? splitCommand(config.getCommand) : (base ?? detectTokens())
-  const setTokens = config.setCommand ? splitCommand(config.setCommand) : (base ?? detectTokens())
-  if (!getTokens?.length || !setTokens?.length) return undefined
+  const commands = resolveCommands(config)
+  if (!commands) return undefined
 
   return {
-    get: () => execFileText(getTokens),
+    get: () => readInputSource(commands.getTokens),
     set: async (source) => {
-      await execFileText(buildSetTokens(setTokens, source, config.waitMs))
+      await readInputSource(buildSetTokens(commands.setTokens, source, config.waitMs))
     },
   }
-}
-
-function detectTokens(): string[] | undefined {
-  const command = Bun.which("macism") ?? Bun.which("im-select")
-  return command ? [command] : undefined
-}
-
-function buildSetTokens(tokens: string[], source: string, waitMs?: number) {
-  let replaced = false
-  const args = tokens.map((token) => {
-    if (!token.includes("{source}")) return token
-    replaced = true
-    return token.replaceAll("{source}", source)
-  })
-  if (!replaced) args.push(source)
-  if (waitMs !== undefined) args.push(String(waitMs))
-  return args
-}
-
-function execFileText(tokens: string[]): Promise<string> {
-  const [command, ...args] = tokens
-  return new Promise((resolve, reject) => {
-    execFile(command ?? "", args, { encoding: "utf8", timeout: 5000 }, (error, stdout) => {
-      if (error) reject(error)
-      else resolve(stdout)
-    })
-  })
-}
-
-export function splitCommand(input: string): string[] {
-  const tokens: string[] = []
-  let current = ""
-  let started = false
-  let quote: "'" | '"' | undefined
-
-  for (const char of input) {
-    if (quote) {
-      if (char === quote) quote = undefined
-      else current += char
-      continue
-    }
-    if (char === "'" || char === '"') {
-      quote = char
-      started = true
-      continue
-    }
-    if (/\s/.test(char)) {
-      if (started || current) tokens.push(current)
-      current = ""
-      started = false
-      continue
-    }
-    current += char
-    started = true
-  }
-
-  if (started || current) tokens.push(current)
-  return tokens
 }
 
 function isMissingCommand(error: unknown) {

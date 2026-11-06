@@ -19,6 +19,7 @@ import { createFormMode } from "./ui/form"
 import { handleComposerKey } from "./ui/composer"
 import { createTerminalControls } from "./ui/terminal"
 import { createInputSourceController } from "./vim/input-source"
+import { InputSourceRpc } from "./rpc"
 import { createInlineController, inlineKeyFor, inlineRegionBlank, trimInlineSteps } from "./vim/inline"
 import type { InlineTailTrim } from "./vim/inline"
 import { createWhichKeyPanel } from "./vim/which-key"
@@ -73,6 +74,19 @@ function VimHost(props: { context: Context }) {
   const inputSource = createInputSourceController(config.inputSource, {
     log,
     notify: (message) => props.context.ui.toast.show({ message, variant: "warning" }),
+    remote: {
+      async get() {
+        const location = props.context.location ?? props.context.data.location.default()
+        const result = await props.context.client.rpc(InputSourceRpc).get({}, { location })
+        return (result as { source?: string | null }).source ?? undefined
+      },
+      onChanged(handler) {
+        return props.context.client.rpc(InputSourceRpc).events.on("changed", (event) => {
+          const data = event.data as { source?: string }
+          if (data.source) handler(data.source)
+        })
+      },
+    },
   })
   const inline = createInlineController(config.inline)
   const whichKey = createWhichKeyPanel({

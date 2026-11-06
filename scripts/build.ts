@@ -5,7 +5,7 @@ import { runtimeModuleIdForSpecifier } from "@opentui/core/runtime-plugin"
 // does not run. Compile JSX here and explicitly use the host's shared modules.
 const shared = new Set(["@opencode/plugin/tui", "@opentui/core", "@opentui/solid", "solid-js", "solid-js/store"])
 
-const result = await Bun.build({
+const tui = await Bun.build({
   entrypoints: ["./tui.tsx"],
   outdir: "./dist",
   target: "bun",
@@ -23,7 +23,19 @@ const result = await Bun.build({
   ],
 })
 
-if (!result.success) {
-  for (const log of result.logs) console.error(log)
-  process.exit(1)
+// The server and RPC parts run in the OpenCode server. They do not use Solid
+// or OpenTUI, so a plain Bun build keeps the bundles small.
+const server = await Bun.build({
+  entrypoints: ["./src/server.ts", "./src/rpc.ts"],
+  outdir: "./dist",
+  target: "bun",
+  format: "esm",
+  packages: "external",
+})
+
+for (const result of [tui, server]) {
+  if (!result.success) {
+    for (const log of result.logs) console.error(log)
+    process.exit(1)
+  }
 }
