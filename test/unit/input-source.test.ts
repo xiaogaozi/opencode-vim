@@ -312,6 +312,93 @@ describe("input source controller", () => {
 
     expect(fake.calls).toEqual([])
   })
+
+  test("uses the remote poller instead of the local helper", async () => {
+    const fake = createFakeRunner("im.cn")
+    const handlers = new Set<(source: string) => void>()
+    let gets = 0
+    const controller = createController(testConfig({ pollInterval: 500 }), {
+      runner: fake.runner,
+      remote: {
+        async get() {
+          gets++
+          return "im.cn"
+        },
+        onChanged(handler) {
+          handlers.add(handler)
+          return () => handlers.delete(handler)
+        },
+      },
+    })
+
+    await controller.settle()
+    expect(gets).toBe(1)
+    expect(fake.calls).toEqual([])
+
+    controller.setActive(true)
+    await Bun.sleep(10)
+    expect(gets).toBe(2)
+    expect(handlers.size).toBe(1)
+
+    for (const handler of handlers) handler("im.other")
+    expect(controller.source()).toBe("im.other")
+
+    controller.setActive(false)
+    expect(handlers.size).toBe(0)
+  })
+
+  test("falls back to the local poller when the remote is unavailable", async () => {
+    const fake = createFakeRunner("im.cn")
+    const controller = createController(testConfig({ pollInterval: 25 }), {
+      runner: fake.runner,
+      remote: {
+        async get() {
+          throw new Error("rpc.unavailable")
+        },
+        onChanged() {
+          throw new Error("rpc.unavailable")
+        },
+      },
+    })
+
+    await controller.settle()
+    expect(fake.calls).toContain("get")
+
+    fake.calls.length = 0
+    controller.setActive(true)
+    await Bun.sleep(80)
+    expect(fake.calls.filter((call) => call === "get").length).toBeGreaterThan(1)
+
+    controller.setActive(false)
+    await Bun.sleep(60)
+    const stopped = fake.calls.filter((call) => call === "get").length
+    await Bun.sleep(60)
+    expect(fake.calls.filter((call) => call === "get").length).toBe(stopped)
+  })
+
+  test("falls back to the local poller when the remote has no helper", async () => {
+    const fake = createFakeRunner("im.cn")
+    const controller = createController(testConfig({ pollInterval: 25 }), {
+      runner: fake.runner,
+      remote: {
+        async get() {
+          return undefined
+        },
+        onChanged() {
+          return () => {}
+        },
+      },
+    })
+
+    await controller.settle()
+    expect(fake.calls).toContain("get")
+
+    fake.calls.length = 0
+    controller.setActive(true)
+    await Bun.sleep(60)
+    expect(fake.calls.filter((call) => call === "get").length).toBeGreaterThan(1)
+    controller.setActive(false)
+  })
 })
 
 describe("splitCommand", () => {

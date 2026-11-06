@@ -9,7 +9,10 @@
     "url": "https://github.com/Tarquinen/opencode-vim"
   },
   "exports": {
-    "./tui": "./dist/tui.js"
+    ".": "./dist/server.js",
+    "./server": "./dist/server.js",
+    "./tui": "./dist/tui.js",
+    "./rpc": "./dist/rpc.js"
   },
   "scripts": {
     "build": "bun scripts/build.ts",
