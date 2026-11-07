@@ -79,6 +79,7 @@ export async function createFixture(
     input,
     state,
     adapter,
+    context,
     config,
     execute: (sequence: string) => adapter.executeKeybind(sequence, context),
     commands,

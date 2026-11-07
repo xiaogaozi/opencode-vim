@@ -34,6 +34,9 @@ export type EditorInput = {
   height?: number
   editorView?: {
     getLogicalLineInfo?: () => LineInfo
+    getViewport?: () => { offsetX: number; offsetY: number; width: number; height: number }
+    setViewport?: (x: number, y: number, width: number, height: number, moveCursor?: boolean) => void
+    getTotalVirtualLineCount?: () => number
     setSelection?: (start: number, end: number, bgColor?: RGBA, fgColor?: RGBA) => void
     resetSelection?: () => void
     deleteSelectedText?: () => void

@@ -764,6 +764,54 @@ describe("markdown list continuation", () => {
   })
 })
 
+describe("page motions", () => {
+  const text = Array.from({ length: 100 }, (_, index) => `line ${index + 1}`).join("\n")
+
+  test("scrolls the viewport and keeps the cursor in the new view", async () => {
+    fixture = await createFixture(text)
+    const height = fixture.input.height
+    expect(fixture.input.scrollY).toBe(0)
+
+    expect(fixture.adapter.page("down", 1, fixture.context)).toBe(true)
+    await fixture.renderOnce()
+    expect(fixture.input.plainText).toBe(text)
+    expect(fixture.input.scrollY).toBeGreaterThanOrEqual(height)
+    expect(fixture.input.logicalCursor.row).toBeGreaterThanOrEqual(height)
+
+    expect(fixture.adapter.page("up", 1, fixture.context)).toBe(true)
+    await fixture.renderOnce()
+    expect(fixture.input.scrollY).toBe(0)
+  })
+
+  test("half pages move by half the viewport", async () => {
+    fixture = await createFixture(text)
+    const height = fixture.input.height
+
+    expect(fixture.adapter.page("down", 0.5, fixture.context)).toBe(true)
+    await fixture.renderOnce()
+    expect(fixture.input.scrollY).toBe(Math.floor(height / 2))
+  })
+
+  test("counts repeat page motions", async () => {
+    fixture = await createFixture(text)
+    const height = fixture.input.height
+    fixture.mockInput.pressKey("2")
+
+    expect(fixture.adapter.page("down", 0.5, fixture.context)).toBe(true)
+    await fixture.renderOnce()
+    expect(fixture.input.scrollY).toBe(height)
+  })
+
+  test("engine scroll actions use the same paging path", async () => {
+    fixture = await createFixture(text)
+    fixture.mockInput.pressKey("f", { ctrl: true })
+    await fixture.renderOnce()
+
+    expect(fixture.input.scrollY).toBeGreaterThan(0)
+    expect(fixture.input.plainText).toBe(text)
+  })
+})
+
 describe("insert context timing", () => {
   const patterns = {
     english: compilePattern(DEFAULT_ENGLISH_PATTERN, DEFAULT_ENGLISH_PATTERN),

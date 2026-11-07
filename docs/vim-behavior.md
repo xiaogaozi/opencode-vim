@@ -14,6 +14,8 @@ Use `/vim` to toggle the plugin on or off.
 | `i`, `a`, `A`, `o`, `O` | Enter insert mode |
 | `h`, `l`, `w`, `b`, `e`, `$`, `0` | Move through the prompt |
 | `j`, `k` | Move through wrapped rows; counts use actual lines |
+| `Ctrl+d`, `Ctrl+u` | Move down / up half a page |
+| `Ctrl+f`, `Ctrl+b`, Page Down, Page Up | Move down / up a full page |
 | Up, Down | OpenCode's cursor/history navigation |
 | `gj`, `gk`, `g0`, `g^`, `g$` | Move through wrapped screen rows |
 | `x`, `d`, `c`, `y`, `p` | Delete, change, yank, and paste |
@@ -103,6 +105,8 @@ using the source text.
 Inside the modal, use Vim motions to move, `v` or `V` to select, and `y` to copy.
 `H`, `M`, and `L` jump to the top, middle, and bottom of the visible area;
 counts move one line further inward and the viewport stays in place.
+`Ctrl+d` and `Ctrl+u` scroll half a page; `Ctrl+f`, `Ctrl+b`, Page Down, and
+Page Up scroll a full page.
 `/` and `?` search the focused section and `n`/`N` move between matches; `y`
 copies the current match. Search results use the text color instead of a
 background so wide characters stay fully covered. `Esc` first clears an active

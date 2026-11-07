@@ -311,6 +311,35 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
       }
       return result
     },
+    /**
+     * Scrolls the focused editor by a page without going through the Vim key
+     * pipeline. Prompt and reader page keys share this path so both scroll the
+     * viewport instead of moving the cursor line by line.
+     */
+    page(direction: "up" | "down", amount: number, ctx: EditorContext): boolean {
+      const input = ctx.input()
+      if (!input) return false
+      attach(ctx)
+      const map = mapForHostText(input.plainText)
+      sync(hostPosition(map, input.cursorOffset))
+      if (vim.mode === "insert" || vim.phase !== "idle") return false
+
+      const count = Math.max(1, vim.count || 1)
+      vim = { ...vim, count: 0 }
+      discardKeybindPending()
+
+      let moved = false
+      for (let index = 0; index < count; index++) {
+        if (!pageViewport(input, ctx, map, direction, amount)) break
+        moved = true
+      }
+      if (!moved) return false
+      updateTimeout(ctx)
+      syncMode(state, vim.mode)
+      syncVisualSelection(input, map, ctx)
+      log("vimee.page", { direction, amount, count, cursor: vim.cursor })
+      return true
+    },
     cleanup() {
       suspend()
       for (const item of histories.values()) item.cleanup()
@@ -433,6 +462,7 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
     history?.begin()
 
     let nextMode: VimContext["mode"] | undefined
+    let scroll = 0
     for (const action of actions) {
       switch (action.type) {
         case "content-change":
@@ -453,6 +483,9 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
           }
           nextMode = action.mode
           break
+        case "scroll":
+          scroll += (action.direction === "down" ? 1 : -1) * action.amount
+          break
         case "quit":
           ctx.blur()
           break
@@ -468,12 +501,44 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
 
     // The engine context already has the final cursor; move the editor once.
     setCursor(input, currentMap, vim.cursor)
+    if (scroll !== 0) {
+      // Host editors scroll the viewport and pull the cursor into the new view.
+      pageViewport(input, ctx, currentMap, scroll > 0 ? "down" : "up", Math.abs(scroll))
+    }
     // Apply the mode signal only after the cursor is in place: consumers like
     // the input source sample the editor cursor when the mode flips.
     if (nextMode !== undefined) syncMode(state, nextMode)
     syncVisualSelection(input, currentMap, ctx)
     if (vim.mode === "insert") history?.begin()
     else history?.end()
+  }
+
+  /**
+   * Moves the editor viewport by a page. OpenTUI's `moveCursor` mode keeps the
+   * cursor inside the new viewport, so the adapter cursor is resynced from the
+   * host afterwards.
+   */
+  function pageViewport(
+    input: EditorInput,
+    ctx: EditorContext,
+    map: PromptMap,
+    direction: "up" | "down",
+    amount: number,
+  ): boolean {
+    if (vim.mode === "insert" || vim.phase !== "idle") return false
+    const view = input.editorView
+    if (!view?.getViewport || !view.setViewport) return false
+    const viewport = view.getViewport()
+    if (!viewport || viewport.height <= 0) return false
+    const total = view.getTotalVirtualLineCount?.() ?? 0
+    const rows = Math.max(1, Math.floor(viewport.height * amount))
+    const maximum = Math.max(0, total - viewport.height)
+    const target = clamp(viewport.offsetY + (direction === "down" ? rows : -rows), 0, maximum)
+    if (target === viewport.offsetY) return false
+    view.setViewport(viewport.offsetX, target, viewport.width, viewport.height, true)
+    vim = { ...vim, cursor: hostPosition(map, input.cursorOffset) }
+    ctx.requestRender()
+    return true
   }
 
   /**

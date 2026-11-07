@@ -48,6 +48,7 @@ export default Plugin.define({
         function inspect(input: typeof editor) {
           if (!input) return null
           if (input.isDestroyed) return { destroyed: true }
+          const view = "editorView" in input ? input.editorView : undefined
           return {
             destroyed: false,
             text: input instanceof InputRenderable ? input.value : input.plainText,
@@ -55,6 +56,9 @@ export default Plugin.define({
             cursorStyle: input.cursorStyle,
             selected: input.hasSelection(),
             id: input.id,
+            height: input.height,
+            scrollY: "scrollY" in input ? input.scrollY : undefined,
+            viewport: view?.getViewport?.(),
           }
         }
         return Response.json({

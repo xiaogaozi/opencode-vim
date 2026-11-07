@@ -21,11 +21,23 @@ export function sessionModeKey(
   if (mode === "modal" && key === "<C-c>") return key
 }
 
+export type PageMotion = {
+  direction: "up" | "down"
+  /** Page fraction: 1 for a full page, 0.5 for half a page. */
+  amount: number
+  /** OpenCode session command for transcript scrolling. */
+  command: string
+}
+
+export function pageMotion(key: string): PageMotion | undefined {
+  if (key === "<C-d>") return { direction: "down", amount: 0.5, command: "session.half.page.down" }
+  if (key === "<C-u>") return { direction: "up", amount: 0.5, command: "session.half.page.up" }
+  if (key === "<C-f>" || key === "<PageDown>") return { direction: "down", amount: 1, command: "session.page.down" }
+  if (key === "<C-b>" || key === "<PageUp>") return { direction: "up", amount: 1, command: "session.page.up" }
+}
+
 export function pageCommand(key: string) {
-  if (key === "<C-d>") return "session.half.page.down"
-  if (key === "<C-u>") return "session.half.page.up"
-  if (key === "<C-f>" || key === "<PageDown>") return "session.page.down"
-  if (key === "<C-b>" || key === "<PageUp>") return "session.page.up"
+  return pageMotion(key)?.command
 }
 
 type SessionBinding = KeybindDefinition & { action: SessionAction }

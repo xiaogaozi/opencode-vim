@@ -13,7 +13,7 @@ import { charToDisplay, displayToChar, displayWidth } from "../vim/map"
 import { keyNotation } from "../vim/keys"
 import { createVimState } from "../vim/state"
 import { createVimeeAdapter } from "../vim/vimee"
-import { createSessionKeymaps, pageCommand, sessionModeKey } from "../ui/session-keys"
+import { createSessionKeymaps, pageMotion, sessionModeKey } from "../ui/session-keys"
 import {
   appendSearchText,
   backspaceSearchText,
@@ -310,13 +310,9 @@ export function TextReader(
       props.back()
       return
     }
-    if (pageCommand(key)) {
-      const down = key === "<C-d>" || key === "<C-f>" || key === "<PageDown>"
-      const half = key === "<C-d>" || key === "<C-u>"
-      const rows = Math.max(1, Math.floor(input.height / (half ? 2 : 1)))
-      for (let row = 0; row < rows; row++)
-        adapter.handle({ ...event, ctrl: false } as KeyEvent, down ? "j" : "k", editorContext)
-    } else adapter.handle(event, key, editorContext)
+    const page = pageMotion(key)
+    if (page) adapter.page(page.direction, page.amount, editorContext)
+    else adapter.handle(event, key, editorContext)
   }
 
   const onPaste = (event: PasteEvent) => {

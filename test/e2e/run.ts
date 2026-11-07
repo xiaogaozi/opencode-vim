@@ -48,6 +48,7 @@ import {
   promptHiddenMode,
   promptHistory,
   promptInput,
+  promptPaging,
 } from "./scenarios/prompt-input"
 import { nativeHistory } from "./scenarios/native-history"
 import { permissionMessages } from "./data/permission"
@@ -74,6 +75,11 @@ const scenarios: Array<{
     name: "prompt-input",
     run: promptInput,
     setup: { vim: { defaultMode: "normal", keymaps: { insert: { kj: "normal" }, normal: { "<Tab>": "x" } } } },
+  },
+  {
+    name: "prompt-paging",
+    run: promptPaging,
+    setup: { probe: true, vim: { defaultMode: "normal" }, cli: { prompt: { paste: "full" } } },
   },
   { name: "prompt-clipboard", run: promptClipboard, setup: { vim: { keymaps: { normal: { Q: "yiw$p" } } } } },
   { name: "prompt-history", run: promptHistory, setup: { stream: "history response" } },
