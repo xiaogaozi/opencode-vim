@@ -10,6 +10,7 @@ import type { VimConfig, VimMappedAction } from "./config"
 import { mappedActionValue } from "./config"
 import { keyToken } from "./keys"
 import type { VimLog } from "./log"
+import type { VimMode } from "./state"
 
 type HostKeybindAction = "normal" | "submit" | "command" | "chain"
 export type HostKeybindDefinition = KeybindDefinition & {
@@ -19,7 +20,11 @@ export type HostKeybindDefinition = KeybindDefinition & {
 }
 
 export function hasNormalKeyPrefix(config: VimConfig, key: string) {
-  for (const sequence of Object.keys(config.keymaps.normal ?? {})) {
+  return hasModeKeyPrefix(config, "normal", key)
+}
+
+export function hasModeKeyPrefix(config: VimConfig, mode: VimMode, key: string) {
+  for (const sequence of Object.keys(config.keymaps[mode] ?? {})) {
     try {
       if (keyToken(parseKeySequence(sequence)[0] ?? "") === key) return true
     } catch {}
