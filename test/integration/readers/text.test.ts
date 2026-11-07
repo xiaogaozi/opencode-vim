@@ -207,6 +207,20 @@ test("paging and resizing retain text and the remembered position", async () => 
   expect(f.reader().cursorOffset).toBeLessThan(offset)
 })
 
+test("Ctrl+f and Ctrl+b scroll the reader by a viewport", async () => {
+  const text = Array.from({ length: 100 }, (_, index) => `line ${index + 1}`).join("\n")
+  const f = await mount(textItem(text))
+  const height = f.reader().height
+
+  f.mockInput.pressKey("f", { ctrl: true })
+  await f.renderOnce()
+  expect(f.reader().scrollY).toBeGreaterThanOrEqual(height)
+
+  f.mockInput.pressKey("b", { ctrl: true })
+  await f.renderOnce()
+  expect(f.reader().scrollY).toBe(0)
+})
+
 test("H, M and L jump within the visible reader without scrolling", async () => {
   const text = Array.from({ length: 100 }, (_, index) => `line ${index + 1}`).join("\n")
   const f = await mount(textItem(text), {}, { width: 80, height: 24 })

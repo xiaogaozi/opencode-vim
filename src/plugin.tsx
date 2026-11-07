@@ -7,6 +7,7 @@ import type { EditorContext } from "./vim/editor"
 import { createVimConfig } from "./vim/config"
 import { createCursorStylePin } from "./vim/cursor"
 import { editInput } from "./vim/edit"
+import { hasModeKeyPrefix } from "./vim/keymaps"
 import { keyNotation } from "./vim/keys"
 import { createVimLog } from "./vim/log"
 import { charToDisplay, displayToChar } from "./vim/map"
@@ -14,6 +15,7 @@ import { createVimState, type VimMode } from "./vim/state"
 import { createVimeeAdapter, historyCursorMode } from "./vim/vimee"
 import { VimStatus } from "./vim/status"
 import { SESSION_MODE, createSessionMode } from "./ui/session"
+import { pageMotion } from "./ui/session-keys"
 import { createVimClipboard } from "./clipboard"
 import { createFormMode } from "./ui/form"
 import { handleComposerKey } from "./ui/composer"
@@ -245,6 +247,15 @@ function VimHost(props: { context: Context }) {
         event.stopPropagation()
         return
       }
+    }
+    const pageKey = kind === "prompt" && state.mode() !== "insert" ? pageMotion(key) : undefined
+    const page = pageKey && !hasModeKeyPrefix(config, state.mode(), key) ? pageKey : undefined
+    if (page) {
+      event.preventDefault()
+      event.stopPropagation()
+      vimee.page(page.direction, page.amount, editorContext)
+      syncCursor(true)
+      return
     }
     if (passThroughKey(event, key, state.mode(), vimee.isPending(), mapped)) return
     if (key === "<Esc>" && state.mode() === "normal" && !vimee.isPending()) return

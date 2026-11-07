@@ -1,6 +1,18 @@
 import { expect, spyOn, test } from "bun:test"
 import { createVimConfig } from "../../src/vim/config"
-import { createSessionKeymaps } from "../../src/ui/session-keys"
+import { createSessionKeymaps, pageCommand, pageMotion } from "../../src/ui/session-keys"
+
+test("page motions share direction, amount and session commands", () => {
+  expect(pageMotion("<C-d>")).toEqual({ direction: "down", amount: 0.5, command: "session.half.page.down" })
+  expect(pageMotion("<C-u>")).toEqual({ direction: "up", amount: 0.5, command: "session.half.page.up" })
+  expect(pageMotion("<C-f>")).toEqual({ direction: "down", amount: 1, command: "session.page.down" })
+  expect(pageMotion("<C-b>")).toEqual({ direction: "up", amount: 1, command: "session.page.up" })
+  expect(pageMotion("<PageDown>")).toEqual({ direction: "down", amount: 1, command: "session.page.down" })
+  expect(pageMotion("<PageUp>")).toEqual({ direction: "up", amount: 1, command: "session.page.up" })
+  expect(pageMotion("j")).toBeUndefined()
+  expect(pageCommand("<C-d>")).toBe("session.half.page.down")
+  expect(pageCommand("j")).toBeUndefined()
+})
 
 test("session toggle accepts a single normal key or control chord, not a sequence", () => {
   for (const key of ["q", "<C-s>", "<C-c>"]) expect(createVimConfig({ sessionKey: key }).sessionKey).toBe(key)

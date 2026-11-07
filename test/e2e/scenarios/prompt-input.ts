@@ -94,6 +94,48 @@ export async function promptClipboard({ terminal }: Fixture) {
   await screen("prompt-to-dialog", (text) => text.includes("Commands") && /^\s+Open shared\s*$/m.test(text))
 }
 
+export async function promptPaging(fixture: Fixture) {
+  const { terminal, probe } = fixture
+  const { keys, paste, screen, cursor } = terminal
+  const text = Array.from({ length: 80 }, (_, index) => `line ${index + 1}`).join("\n")
+
+  await keys("i")
+  await paste(text)
+  await screen("pasted", (screen) => screen.includes("line 80"))
+  await keys("Escape", "gg")
+  await screen("page-top", (screen) => lineNumber(promptLine(screen, cursor().y)) === 1)
+  const top = await waitForEditor(probe, (editor) => editor?.scrollY === 0 && editor?.cursor === 0)
+
+  await keys("C-f")
+  await screen("page-down", (screen) => lineNumber(promptLine(screen, cursor().y)) > 1)
+  const down = await waitForEditor(probe, (editor) => (editor?.scrollY ?? 0) > (top?.scrollY ?? 0))
+
+  await keys("C-b")
+  await screen("page-up", (screen) => screen.includes("line 1"))
+  await waitForEditor(
+    probe,
+    (editor) => editor?.scrollY === 0 && (editor?.cursor ?? Number.MAX_SAFE_INTEGER) < (down?.cursor ?? 0),
+  )
+
+  await keys("PageDown")
+  await waitForEditor(probe, (editor) => (editor?.scrollY ?? 0) > 0)
+  await keys("PageUp")
+  await waitForEditor(probe, (editor) => editor?.scrollY === 0)
+}
+
+async function waitForEditor(
+  probe: Fixture["probe"],
+  check: (editor: { scrollY?: number; cursor?: number } | null) => boolean,
+) {
+  const deadline = Date.now() + 5_000
+  while (true) {
+    const editor = (await probe()).editor
+    if (check(editor)) return editor
+    if (Date.now() >= deadline) throw new Error(`Timed out waiting for editor state: ${JSON.stringify(editor)}`)
+    await Bun.sleep(50)
+  }
+}
+
 export async function promptHistory(fixture: Fixture) {
   const { terminal } = fixture
   const { keys, type, screen } = terminal
@@ -176,4 +218,8 @@ async function seedHistory({ terminal, stream }: Fixture) {
 
 function promptLine(text: string, row: number) {
   return (text.split("\n")[row] ?? "").replace(/^\s*┃\s?/, "").trim()
+}
+
+function lineNumber(line: string) {
+  return Number(/line (\d+)/.exec(line)?.[1] ?? 0)
 }
