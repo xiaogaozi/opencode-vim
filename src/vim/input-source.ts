@@ -316,17 +316,19 @@ export function createInputSourceController(config: VimInputSource, deps: InputS
     }, confirmDelayMs)
   }
 
-  // macOS can restore the previous source right after a CJK switch (the same
-  // focus quirk macism's workaround works around). Verify once and retry if
-  // the switch was reverted to the normal source.
+  // macOS can drop a CJK switch after the system-wide commit: the menu bar and
+  // TIS report the target while the focused app still types latin, and it can
+  // also restore the previous source right after the switch (the same focus
+  // quirk macism's workaround targets). Re-apply once in both cases; macism's
+  // focused-app path re-requests the switch and can make it stick.
   async function confirmSwitch(target: string, token: number) {
     if (token !== applyToken || lastMode !== "insert") return
 
     const current = await readCurrent()
     if (token !== applyToken || lastMode !== "insert") return
-    if (!current || current === target || current !== config.normal) return
+    if (!current || (current !== target && current !== config.normal)) return
 
-    log("input-source.confirm", { result: "reverted", target })
+    log("input-source.confirm", { result: current === target ? "reapply" : "reverted", target })
     await apply(target, true, false)
   }
 
