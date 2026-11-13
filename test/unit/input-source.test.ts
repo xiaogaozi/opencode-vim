@@ -234,7 +234,7 @@ describe("input source controller", () => {
     expect(fake.calls).toEqual(["set:im.cn", "get", "set:im.cn"])
   })
 
-  test("does not retry when the switch holds", async () => {
+  test("re-applies once when the source already reports the target", async () => {
     const fake = createFakeRunner("im.cn")
     const controller = createController(testConfig(), { runner: fake.runner, confirmDelayMs: 15 })
 
@@ -246,7 +246,9 @@ describe("input source controller", () => {
     controller.sync("insert", { text: "中文", position: 2 })
     await controller.settle()
     await Bun.sleep(40)
-    expect(fake.calls).toEqual(["set:im.cn", "get"])
+    // macOS can report the target while the focused app still types latin, so
+    // the plugin re-applies once through macism's focused-app path.
+    expect(fake.calls).toEqual(["set:im.cn", "get", "set:im.cn"])
   })
 
   test("does not retry after leaving insert", async () => {

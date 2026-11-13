@@ -243,10 +243,13 @@ automatically. Example configuration inside `options.vim`:
   `waitMs` is appended after the source id as an extra argument (macism's
   macOS 26 workaround delay). Set `waitMs` to `0` to skip macism's
   `TemporaryWindow` workaround, which on some macOS 26 setups fails to switch
-  CJK sources.
-- When macOS restores the previous source right after a CJK switch (the same
-  focus quirk the `TemporaryWindow` workaround targets), the plugin verifies
-  the switch once after a short delay and retries it.
+  CJK sources. macism v4.0.0+ first asks the focused application to switch
+  (like the input menu) and avoids the "menu bar says Chinese but typing stays
+  latin" race of the older `TemporaryWindow` path; prefer it over v3.x.
+- macOS can drop a CJK switch: the menu bar and `macism` reads report the
+  target while the focused app still types latin, or the source is restored
+  right after the switch. After a short delay the plugin re-applies the switch
+  once, so macism's focused-app path (v4.0.0+) can make it stick.
 
 The plugin resets to the `normal` source and the default cursor color when Vim
 mode is disabled or the plugin unloads. Switching does not apply over SSH,
