@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import { Plugin } from "@opencode/plugin/tui"
 import type { Context } from "@opencode/plugin/tui/context"
-import { InputRenderable, KeyEvent, PasteEvent, RGBA } from "@opentui/core"
+import { InputRenderable, KeyEvent, PasteEvent, RGBA, type TextareaRenderable } from "@opentui/core"
 import { createEffect, createSignal, onCleanup, untrack } from "solid-js"
 import type { EditorContext } from "./vim/editor"
 import { createVimConfig } from "./vim/config"
@@ -25,6 +25,7 @@ import { InputSourceRpc } from "./rpc"
 import { createInlineController, inlineKeyFor, inlineRegionBlank, trimInlineSteps } from "./vim/inline"
 import type { InlineTailTrim } from "./vim/inline"
 import { createWhichKeyPanel } from "./vim/which-key"
+import { createPromptMarkdown } from "./ui/prompt-markdown"
 
 export default Plugin.define({
   id: "opencode-vim",
@@ -61,6 +62,7 @@ function VimHost(props: { context: Context }) {
   const enabled = () => saved.enabled
   const form = createFormMode(props.context, config, log, enabled)
   const editorContext = createEditorContext(props.context, log)
+  const promptMarkdown = createPromptMarkdown(props.context)
   let cursorMode = ""
   let cursorColor: string | undefined
   let cursorInput: typeof props.context.renderer.currentFocusedEditor = null
@@ -387,6 +389,7 @@ function VimHost(props: { context: Context }) {
     props.context.renderer.off("focused_editor", onFocus)
     vimee.cleanup()
     dialogVimee.cleanup()
+    promptMarkdown.dispose()
     void clipboard.dispose()
     void inputSource.dispose()
     restoreCursor()
@@ -407,6 +410,11 @@ function VimHost(props: { context: Context }) {
     const input = props.context.renderer.currentFocusedEditor
     const kind = inputKind(props.context)
     setDialogFocused(kind === "dialog")
+    promptMarkdown.attach(
+      enabled() && input && (kind === "prompt" || promptMarkdown.current() === input)
+        ? (input as TextareaRenderable)
+        : undefined,
+    )
     if (!enabled() || !kind || !input) {
       restoreCursor()
       return
