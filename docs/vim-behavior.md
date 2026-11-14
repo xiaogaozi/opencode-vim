@@ -42,6 +42,11 @@ ordered list also increments the following same-level items, while nested lists
 and lists after a blank line keep their numbering. See
 [Configuration](./configuration.md#markdown-list-continuation) to disable it.
 
+Prompt text is syntax-highlighted as Markdown while you type. Markers such as
+`#`, `**`, and backticks stay visible, and fenced code blocks use the same
+language parsers as the session reader. Highlighting follows the plugin's
+`/vim` toggle.
+
 Text objects include words and quotes, plus `iq`/`aq` for the nearest quote pair,
 `ip`/`ap` for paragraphs, and `ib`/`ab` or `iB`/`aB` for parentheses or braces.
 

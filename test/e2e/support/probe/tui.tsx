@@ -75,6 +75,8 @@ export default Plugin.define({
             background: rgbToHex(context.theme.text.feedback.info.base),
             search: rgbToHex(context.theme.text.feedback.warning.base),
             searchCurrent: rgbToHex(context.theme.text.feedback.info.base),
+            markdownHeading: rgbToHex(context.theme.markdown.heading),
+            markdownStrong: rgbToHex(context.theme.markdown.strong),
           },
         })
       },

@@ -1,9 +1,10 @@
-import { expect, test } from "bun:test"
+import { expect, spyOn, test } from "bun:test"
 import {
   BoxRenderable,
   CodeRenderable,
   DiffRenderable,
   LineNumberRenderable,
+  getTreeSitterClient,
   rgbToHex,
   SyntaxStyle,
   TextareaRenderable,
@@ -185,6 +186,45 @@ test("diff code colors and change backgrounds match native unified diff renderin
     syntax.destroy()
   }
 }, 15_000)
+
+test("highlight application requests one render for the whole range set", async () => {
+  const screen = await createTestRenderer({ width: 40, height: 10 })
+  const text = "# title\n\n**bold**"
+  const input = new TextareaRenderable(screen.renderer, {
+    id: "reader",
+    initialValue: text,
+    width: 40,
+    height: 6,
+    textColor: "#ffffff",
+  })
+  screen.renderer.root.add(input)
+  await screen.renderOnce()
+  const syntax = SyntaxStyle.fromStyles(
+    {
+      default: { fg: "#ffffff" },
+      "markup.heading.1": { fg: "#ff0000" },
+      "markup.strong": { fg: "#00ff00" },
+    },
+    screen.renderer.nativeScene,
+  )
+  const highlighting = spyOn(getTreeSitterClient(), "highlightOnce").mockResolvedValue({
+    highlights: [
+      [0, 7, "markup.heading.1"],
+      [9, 17, "markup.strong"],
+    ],
+  })
+  const render = spyOn(input, "requestRender")
+  try {
+    await highlightCode(input, syntax, "markdown", new AbortController().signal, screen.renderer.widthMethod)
+    expect(render).toHaveBeenCalledTimes(1)
+    expect(input.plainText).toBe(text)
+    expect(input.editBuffer.getLineHighlights(0).length).toBe(1)
+  } finally {
+    highlighting.mockRestore()
+    syntax.destroy()
+    screen.renderer.destroy()
+  }
+})
 
 function colors(line: CapturedLine) {
   const result: Array<[string, string]> = []

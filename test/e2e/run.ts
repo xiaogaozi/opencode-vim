@@ -51,6 +51,7 @@ import {
   promptPaging,
   promptVisualBlock,
 } from "./scenarios/prompt-input"
+import { promptMarkdown } from "./scenarios/prompt-markdown"
 import { nativeHistory } from "./scenarios/native-history"
 import { permissionMessages } from "./data/permission"
 import { permissionTools } from "./scenarios/permission-tools"
@@ -76,6 +77,11 @@ const scenarios: Array<{
     name: "prompt-input",
     run: promptInput,
     setup: { vim: { defaultMode: "normal", keymaps: { insert: { kj: "normal" }, normal: { "<Tab>": "x" } } } },
+  },
+  {
+    name: "prompt-markdown",
+    run: promptMarkdown,
+    setup: { probe: true, vim: { defaultMode: "insert" }, cli: { prompt: { paste: "full" } } },
   },
   {
     name: "prompt-paging",
