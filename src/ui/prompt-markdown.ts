@@ -1,15 +1,13 @@
 import type { Context } from "@opencode/plugin/tui/context"
 import type { TextareaRenderable } from "@opentui/core"
-import { createReaderSyntax, highlightCode } from "../readers/syntax"
+import { ensureReaderSyntaxTokens, highlightCode } from "../readers/syntax"
 
 export const PROMPT_MARKDOWN_HL_REF = 0x6d64
 const DEFAULT_DELAY = 150
 
 export function createPromptMarkdown(context: Context, options: { delay?: number } = {}) {
-  const syntax = createReaderSyntax(context)
   const delay = options.delay ?? DEFAULT_DELAY
   let input: TextareaRenderable | undefined
-  const attached = new Set<TextareaRenderable>()
   let highlighted = false
   let timer: ReturnType<typeof setTimeout> | undefined
   let controller: AbortController | undefined
@@ -26,7 +24,6 @@ export function createPromptMarkdown(context: Context, options: { delay?: number
     )
       return
     input = next
-    attached.add(next)
     highlighted = false
     safe(() => next.editBuffer.on("content-changed", onChange))
     schedule(0)
@@ -45,15 +42,6 @@ export function createPromptMarkdown(context: Context, options: { delay?: number
     if (!current.isDestroyed) {
       safe(() => current.removeHighlightsByRef(PROMPT_MARKDOWN_HL_REF))
       safe(() => current.requestRender())
-      // OpenCode 2.1 treats a style change during focus transfer as a prompt
-      // update and can swallow the plugin-manager dialog. Drop our style once
-      // the new focus has settled instead.
-      setTimeout(() => {
-        if (input !== current && !current.isDestroyed) {
-          safe(() => current.editBuffer.setSyntaxStyle(null))
-          safe(() => current.requestRender())
-        }
-      }, 0)
     }
   }
 
@@ -76,12 +64,23 @@ export function createPromptMarkdown(context: Context, options: { delay?: number
     const text = current.plainText
     const markdown = looksLikeMarkdown(text)
     if (!highlighted && !markdown) return
+    const style = current.syntaxStyle
+    if (!style) return
+    // The prompt style belongs to the host: reuse it so host-only scopes such
+    // as `extmark.file` keep resolving for @ references.
+    try {
+      ensureReaderSyntaxTokens(style, context.theme.surface("dialog"))
+    } catch {
+      return
+    }
     controller?.abort()
     const next = new AbortController()
     controller = next
     try {
-      await highlightCode(current, syntax, "markdown", next.signal, context.renderer.widthMethod, {
+      await highlightCode(current, style, "markdown", next.signal, context.renderer.widthMethod, {
         hlRef: PROMPT_MARKDOWN_HL_REF,
+        applyStyle: false,
+        exclude: current.extmarks.getAll().map((extmark) => ({ start: extmark.start, end: extmark.end })),
       })
       if (current === input && current.plainText === text) highlighted = markdown
     } catch {}
@@ -89,14 +88,6 @@ export function createPromptMarkdown(context: Context, options: { delay?: number
 
   function dispose() {
     detach()
-    // Release the style before its owner is destroyed, even if a focus
-    // transfer is still settling.
-    for (const editor of attached) {
-      if (editor.isDestroyed) continue
-      safe(() => editor.editBuffer.removeHighlightsByRef(PROMPT_MARKDOWN_HL_REF))
-      safe(() => editor.editBuffer.setSyntaxStyle(null))
-    }
-    attached.clear()
   }
 
   return { attach, current: () => input, dispose }
