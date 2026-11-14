@@ -74,6 +74,7 @@ const DEFAULT_CURSOR_STYLES: Record<VimMode, VimCursorStyle> = {
   normal: { style: "block", blinking: true },
   visual: { style: "block", blinking: true },
   "visual-line": { style: "block", blinking: true },
+  "visual-block": { style: "block", blinking: true },
 }
 
 const DEFAULT_WHICH_KEY: VimWhichKey = { enabled: false }
@@ -93,6 +94,10 @@ export function createVimConfig(options: unknown): VimConfig {
       normal: { ...DEFAULT_CURSOR_STYLES.normal, ...input.cursorStyles?.normal },
       visual: { ...DEFAULT_CURSOR_STYLES.visual, ...input.cursorStyles?.visual },
       "visual-line": { ...DEFAULT_CURSOR_STYLES["visual-line"], ...input.cursorStyles?.["visual-line"] },
+      "visual-block": {
+        ...DEFAULT_CURSOR_STYLES["visual-block"],
+        ...input.cursorStyles?.["visual-block"],
+      },
     },
     inputSource: input.inputSource ?? DEFAULT_INPUT_SOURCE,
     inline: input.inline ?? DEFAULT_INLINE,
@@ -143,7 +148,7 @@ function readKeymaps(input: unknown): VimKeymaps | undefined {
   const source = input as Record<string, unknown>
   const keymaps: VimKeymaps = {}
 
-  for (const mode of ["insert", "normal", "visual", "visual-line", "panes"] as const) {
+  for (const mode of ["insert", "normal", "visual", "visual-line", "visual-block", "panes"] as const) {
     const raw = source[mode]
     if (!raw || typeof raw !== "object") continue
     keymaps[mode] = {}
@@ -170,6 +175,7 @@ function readCursorStyles(input: unknown): VimOptions["cursorStyles"] {
     normal: readCursorStyle(source.normal),
     visual: readCursorStyle(source.visual),
     "visual-line": readCursorStyle(source["visual-line"]),
+    "visual-block": readCursorStyle(source["visual-block"]),
   }
 }
 
@@ -222,6 +228,8 @@ function isCursorStyle(value: unknown): value is VimCursorStyle["style"] {
 }
 
 function isMode(value: unknown): value is VimMode {
+  // visual-block needs an anchor and is entered with Ctrl-V, so it cannot be a
+  // startup mode.
   return value === "insert" || value === "normal" || value === "visual" || value === "visual-line"
 }
 

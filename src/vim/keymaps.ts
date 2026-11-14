@@ -36,7 +36,7 @@ export function createKeybinds(config: VimConfig, log: VimLog): KeybindMap | und
   const map = createKeybindMap()
   let count = 0
 
-  for (const mode of ["insert", "normal", "visual", "visual-line"] as const) {
+  for (const mode of ["insert", "normal", "visual", "visual-line", "visual-block"] as const) {
     const keymaps = config.keymaps[mode]
     if (!keymaps) continue
     for (const [keys, action] of Object.entries(keymaps)) {

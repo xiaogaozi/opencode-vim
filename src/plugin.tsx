@@ -248,6 +248,12 @@ function VimHost(props: { context: Context }) {
         return
       }
     }
+    if (kind === "prompt" && state.mode() === "normal" && key === "<C-v>" && !mapped) {
+      event.preventDefault()
+      event.stopPropagation()
+      if (runVimeeResult(vimee.handle(event, key, editorContext))) syncCursor(true)
+      return
+    }
     const pageKey = kind === "prompt" && state.mode() !== "insert" ? pageMotion(key) : undefined
     const page = pageKey && !hasModeKeyPrefix(config, state.mode(), key) ? pageKey : undefined
     if (page) {

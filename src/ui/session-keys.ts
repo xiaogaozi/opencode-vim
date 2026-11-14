@@ -18,7 +18,7 @@ export function sessionModeKey(
   if (mapped?.(key) || key === sessionKey) return key
   if (!event.ctrl || key === "<C-[>") return key
   if (pageCommand(key)) return key
-  if (mode === "modal" && key === "<C-c>") return key
+  if (mode === "modal" && (key === "<C-c>" || key === "<C-v>")) return key
 }
 
 export type PageMotion = {

@@ -812,6 +812,28 @@ describe("page motions", () => {
   })
 })
 
+describe("visual block", () => {
+  test("Ctrl+V yanks and deletes rectangles", async () => {
+    const yanked: string[] = []
+    fixture = await createFixture("abcd\nefgh\nijkl", {}, 80, {
+      onYank: (text) => yanked.push(text),
+    })
+
+    fixture.mockInput.pressKey("v", { ctrl: true })
+    expect(fixture.state.mode()).toBe("visual-block")
+    await fixture.keys("ljj")
+    await fixture.keys("y")
+    expect(yanked.at(-1)).toBe("ab\nef\nij")
+    expect(fixture.state.mode()).toBe("normal")
+
+    fixture.mockInput.pressKey("v", { ctrl: true })
+    await fixture.keys("ljj")
+    await fixture.keys("d")
+    expect(fixture.input.plainText).toBe("cd\ngh\nkl")
+    expect(fixture.state.mode()).toBe("normal")
+  })
+})
+
 describe("insert context timing", () => {
   const patterns = {
     english: compilePattern(DEFAULT_ENGLISH_PATTERN, DEFAULT_ENGLISH_PATTERN),
