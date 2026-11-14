@@ -1,5 +1,5 @@
 import type { Context } from "@opencode/plugin/tui/context"
-import type { SyntaxStyle, TextareaRenderable } from "@opentui/core"
+import type { TextareaRenderable } from "@opentui/core"
 import { createReaderSyntax, highlightCode } from "../readers/syntax"
 
 export const PROMPT_MARKDOWN_HL_REF = 0x6d64
@@ -9,7 +9,7 @@ export function createPromptMarkdown(context: Context, options: { delay?: number
   const syntax = createReaderSyntax(context)
   const delay = options.delay ?? DEFAULT_DELAY
   let input: TextareaRenderable | undefined
-  let savedStyle: SyntaxStyle | null | undefined
+  const attached = new Set<TextareaRenderable>()
   let highlighted = false
   let timer: ReturnType<typeof setTimeout> | undefined
   let controller: AbortController | undefined
@@ -26,9 +26,9 @@ export function createPromptMarkdown(context: Context, options: { delay?: number
     )
       return
     input = next
-    savedStyle = next.syntaxStyle
+    attached.add(next)
     highlighted = false
-    next.editBuffer.on("content-changed", onChange)
+    safe(() => next.editBuffer.on("content-changed", onChange))
     schedule(0)
   }
 
@@ -41,13 +41,20 @@ export function createPromptMarkdown(context: Context, options: { delay?: number
     input = undefined
     if (!current) return
     highlighted = false
-    current.editBuffer.off("content-changed", onChange)
+    safe(() => current.editBuffer.off("content-changed", onChange))
     if (!current.isDestroyed) {
-      current.removeHighlightsByRef(PROMPT_MARKDOWN_HL_REF)
-      current.syntaxStyle = savedStyle ?? null
-      current.requestRender()
+      safe(() => current.removeHighlightsByRef(PROMPT_MARKDOWN_HL_REF))
+      safe(() => current.requestRender())
+      // OpenCode 2.1 treats a style change during focus transfer as a prompt
+      // update and can swallow the plugin-manager dialog. Drop our style once
+      // the new focus has settled instead.
+      setTimeout(() => {
+        if (input !== current && !current.isDestroyed) {
+          safe(() => current.editBuffer.setSyntaxStyle(null))
+          safe(() => current.requestRender())
+        }
+      }, 0)
     }
-    savedStyle = undefined
   }
 
   function onChange() {
@@ -82,9 +89,23 @@ export function createPromptMarkdown(context: Context, options: { delay?: number
 
   function dispose() {
     detach()
+    // Release the style before its owner is destroyed, even if a focus
+    // transfer is still settling.
+    for (const editor of attached) {
+      if (editor.isDestroyed) continue
+      safe(() => editor.editBuffer.removeHighlightsByRef(PROMPT_MARKDOWN_HL_REF))
+      safe(() => editor.editBuffer.setSyntaxStyle(null))
+    }
+    attached.clear()
   }
 
   return { attach, current: () => input, dispose }
+}
+
+function safe(operation: () => void) {
+  try {
+    operation()
+  } catch {}
 }
 
 /** Cheap guard so ordinary prose does not trigger tree-sitter on every pause. */

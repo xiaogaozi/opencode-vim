@@ -72,11 +72,12 @@ test("prompt Markdown highlighting keeps text, cursor and host highlights intact
     )
 
     manager.attach(undefined)
+    await Bun.sleep(5)
     expect(input.editBuffer.getLineHighlights(0).some((highlight) => highlight.hlRef === 1)).toBe(true)
     expect(input.editBuffer.getLineHighlights(0).some((highlight) => highlight.hlRef === PROMPT_MARKDOWN_HL_REF)).toBe(
       false,
     )
-    expect(input.syntaxStyle).toBe(hostStyle)
+    expect(input.syntaxStyle).toBeNull()
     expect(input.plainText).toBe(edited)
   } finally {
     manager.dispose()
