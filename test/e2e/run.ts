@@ -52,6 +52,8 @@ import {
   promptVisualBlock,
 } from "./scenarios/prompt-input"
 import { promptMarkdown } from "./scenarios/prompt-markdown"
+import { promptImagePlaceholder } from "./scenarios/prompt-image"
+import { promptPastePlaceholder } from "./scenarios/prompt-paste"
 import { nativeHistory } from "./scenarios/native-history"
 import { permissionMessages } from "./data/permission"
 import { permissionTools } from "./scenarios/permission-tools"
@@ -83,6 +85,8 @@ const scenarios: Array<{
     run: promptMarkdown,
     setup: { probe: true, vim: { defaultMode: "insert" }, cli: { prompt: { paste: "full" } } },
   },
+  { name: "prompt-paste-placeholder", run: promptPastePlaceholder, setup: { probe: true } },
+  { name: "prompt-image-placeholder", run: promptImagePlaceholder, setup: { probe: true } },
   {
     name: "prompt-paging",
     run: promptPaging,
