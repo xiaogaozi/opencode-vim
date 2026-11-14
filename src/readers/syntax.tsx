@@ -51,12 +51,18 @@ export function createReaderSyntax(context: Context) {
   return style
 }
 
+export type HighlightOptions = {
+  /** Keeps highlight ownership separate from the host's own ranges. */
+  hlRef?: number
+}
+
 export async function highlightCode(
   input: TextareaRenderable,
   style: SyntaxStyle,
   filetype: string,
   signal: AbortSignal,
   widthMethod: WidthMethod,
+  options: HighlightOptions = {},
 ) {
   const text = input.plainText
   let result
@@ -65,14 +71,20 @@ export async function highlightCode(
   } catch {
     return
   }
-  if (signal.aborted || input.isDestroyed || !result.highlights?.length) return
-  input.syntaxStyle = style
+  if (signal.aborted || input.isDestroyed || input.plainText !== text) return
+  if (!result.highlights?.length) {
+    if (options.hlRef !== undefined) {
+      input.editBuffer.removeHighlightsByRef(options.hlRef)
+      input.requestRender()
+    }
+    return
+  }
   const map = createPromptMap(text, undefined, widthMethod)
-  const ranges: Array<{ start: number; end: number; styleId: number }> = []
+  const ranges: Array<{ start: number; end: number; styleId: number; priority: number }> = []
   for (const [start, end, scope] of result.highlights) {
     const styleId = style.getStyleId(scope)
     if (styleId === null) continue
-    const range = { start: highlightOffset(start), end: highlightOffset(end), styleId }
+    const range = { start: highlightOffset(start), end: highlightOffset(end), styleId, priority: 0 }
     if (range.end > range.start) ranges.push(range)
   }
   // Markdown headings and fenced blocks contain nested inline/code ranges.
@@ -82,9 +94,20 @@ export async function highlightCode(
   const active: typeof ranges = []
   for (const range of ranges) {
     while (active.length > 0 && active[active.length - 1].end <= range.start) active.pop()
-    input.addHighlightByCharRange({ ...range, priority: Math.min(255, active.length) })
+    range.priority = Math.min(255, active.length)
     active.push(range)
   }
+
+  // Compute everything first, then change the buffer without requesting a
+  // render per range. The editor should repaint once with the final state.
+  const buffer = input.editBuffer
+  if (options.hlRef !== undefined) buffer.removeHighlightsByRef(options.hlRef)
+  if (ranges.length === 0) {
+    if (options.hlRef !== undefined) input.requestRender()
+    return
+  }
+  if (buffer.getSyntaxStyle() !== style) buffer.setSyntaxStyle(style)
+  for (const range of ranges) buffer.addHighlightByCharRange({ ...range, hlRef: options.hlRef })
   input.requestRender()
 
   function highlightOffset(index: number) {
