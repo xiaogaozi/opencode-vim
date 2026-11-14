@@ -53,5 +53,6 @@ function modeLabel(mode: VimMode, inline = false) {
   if (inline) return "INLINE"
   if (mode === "visual") return "VISUAL"
   if (mode === "visual-line") return "VISUAL LINE"
+  if (mode === "visual-block") return "VISUAL BLOCK"
   return mode === "normal" ? "NORMAL" : "INSERT"
 }

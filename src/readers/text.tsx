@@ -363,6 +363,7 @@ export function TextReader(
   function modeLabel() {
     if (state.mode() === "visual") return "VISUAL"
     if (state.mode() === "visual-line") return "VISUAL LINE"
+    if (state.mode() === "visual-block") return "VISUAL BLOCK"
     return ""
   }
   const height = () => props.maxHeight ?? Math.max(1, Math.min(30, dimensions().height - 10))

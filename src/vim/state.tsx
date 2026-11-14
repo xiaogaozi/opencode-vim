@@ -3,7 +3,7 @@
 import { createSignal } from "solid-js"
 import type { VimLog } from "./log"
 
-export type VimMode = "normal" | "insert" | "visual" | "visual-line"
+export type VimMode = "normal" | "insert" | "visual" | "visual-line" | "visual-block"
 export type VimStateListener = () => void
 
 export function createVimState(defaultMode: VimMode, log: VimLog = () => {}) {
