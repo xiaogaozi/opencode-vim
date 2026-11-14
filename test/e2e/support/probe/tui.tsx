@@ -77,6 +77,8 @@ export default Plugin.define({
             searchCurrent: rgbToHex(context.theme.text.feedback.info.base),
             markdownHeading: rgbToHex(context.theme.markdown.heading),
             markdownStrong: rgbToHex(context.theme.markdown.strong),
+            markdownLink: rgbToHex(context.theme.markdown.link),
+            reference: rgbToHex(context.theme.text.feedback.warning.base),
           },
         })
       },

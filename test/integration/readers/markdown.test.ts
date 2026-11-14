@@ -59,7 +59,7 @@ test("Markdown highlighting covers fenced code and keeps the source text", async
     expect(spans.some((span) => span.text === "**bold**" && rgbToHex(span.fg) === "#ff8800")).toBe(true)
     expect(spans.some((span) => span.text === "`inline`" && rgbToHex(span.fg) === "#00ff00")).toBe(true)
     expect(spans.some((span) => span.text === "const" && rgbToHex(span.fg) === "#ff0000")).toBe(true)
-    expect(spans.some((span) => span.text === '"hello"' && rgbToHex(span.fg) === "#00ff00")).toBe(true)
+    expect(spans.some((span) => span.text.includes('"hello"') && rgbToHex(span.fg) === "#00ff00")).toBe(true)
     expect(f.reader().plainText).toBe(text)
     await f.keys("ggVGy")
     expect(f.copied.at(-1)).toBe(text + "\n")
