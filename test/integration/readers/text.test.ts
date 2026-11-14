@@ -207,6 +207,18 @@ test("paging and resizing retain text and the remembered position", async () => 
   expect(f.reader().cursorOffset).toBeLessThan(offset)
 })
 
+test("Ctrl+V yanks a visual block", async () => {
+  const f = await mount(textItem("abcd\nefgh\nijkl"))
+  f.mockInput.pressKey("v", { ctrl: true })
+  await f.renderOnce()
+  expect(f.captureCharFrame()).toContain("VISUAL BLOCK")
+
+  await f.keys("ljj")
+  await f.keys("y")
+  expect(f.copied.at(-1)).toBe("ab\nef\nij")
+  expect(f.captureCharFrame()).not.toContain("VISUAL BLOCK")
+})
+
 test("Ctrl+f and Ctrl+b scroll the reader by a viewport", async () => {
   const text = Array.from({ length: 100 }, (_, index) => `line ${index + 1}`).join("\n")
   const f = await mount(textItem(text))

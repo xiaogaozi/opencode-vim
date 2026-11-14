@@ -990,7 +990,7 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
     }
     if (
       !ctrl &&
-      isVisualMode(vim.mode) &&
+      (vim.mode === "visual" || vim.mode === "visual-line") &&
       vim.phase === "idle" &&
       vim.visualAnchor &&
       (key === "U" || key === "u" || key === "~")
@@ -1364,6 +1364,9 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
     }
 
     cancelYankFlash()
+    // OpenTUI only supports one linear selection range, so a visual block is
+    // highlighted as the span between its endpoints. The engine still applies
+    // block operators to the exact rectangle.
     const range =
       vim.mode === "visual-line"
         ? visualLineRange(map, vim.visualAnchor, vim.cursor)
@@ -1422,7 +1425,7 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
 
 function readOnlyKey(key: string, ctrl: boolean, vim: VimContext) {
   if (key === "Escape") return true
-  if (ctrl) return false
+  if (ctrl) return key === "v" && vim.phase === "idle"
   if (screenMotionKey(key)) return vim.phase === "idle"
   if (vim.phase === "char-pending" || vim.phase === "text-object-pending" || vim.phase === "register-pending")
     return true
@@ -1561,8 +1564,8 @@ function clearVisualSelection(input: EditorInput) {
   input.editorView?.resetSelection?.()
 }
 
-function isVisualMode(mode: VimContext["mode"]): mode is "visual" | "visual-line" {
-  return mode === "visual" || mode === "visual-line"
+function isVisualMode(mode: VimContext["mode"]): mode is "visual" | "visual-line" | "visual-block" {
+  return mode === "visual" || mode === "visual-line" || mode === "visual-block"
 }
 
 function clampNormalCursor(input: EditorInput, map: PromptMap) {
@@ -1612,7 +1615,9 @@ function defaultHistoryCommand(
 }
 
 function syncMode(state: VimState, mode: VimContext["mode"]) {
-  state.setMode(mode === "insert" || mode === "visual" || mode === "visual-line" ? mode : "normal")
+  state.setMode(
+    mode === "insert" || mode === "visual" || mode === "visual-line" || mode === "visual-block" ? mode : "normal",
+  )
 }
 
 function pendingDisplay(ctx: VimContext, keybindPending: boolean) {

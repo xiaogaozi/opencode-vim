@@ -21,6 +21,7 @@ Use `/vim` to toggle the plugin on or off.
 | `x`, `d`, `c`, `y`, `p` | Delete, change, yank, and paste |
 | `u`, `Ctrl+r`, `.` | Undo, redo, and repeat the last change |
 | `v`, `V` | Visual and visual-line selection |
+| `Ctrl+v` | Visual block selection (`VISUAL BLOCK`) |
 | `U`, `u`, `~` in visual mode | Uppercase, lowercase, or swap the case of the selection |
 | `3w`, `diw`, `ci"`, `yiq`, `dip`, `yib` | Counts and text objects |
 | `k`, `j` from an empty prompt | Browse previous and next prompts |
@@ -43,6 +44,11 @@ and lists after a blank line keep their numbering. See
 
 Text objects include words and quotes, plus `iq`/`aq` for the nearest quote pair,
 `ip`/`ap` for paragraphs, and `ib`/`ab` or `iB`/`aB` for parentheses or braces.
+
+`Ctrl+v` selects a rectangular block. Block yanks, cuts, and changes operate on
+the exact rectangle. The host exposes only a single linear selection range, so a
+multi-line block is highlighted as the span between its endpoints; the copied
+or removed text is still the rectangle.
 
 Word motions follow Vim's character classes. Chinese punctuation, kana, Hangul,
 full-width characters and emoji all act as word boundaries, so `w`, `b` and `e`
@@ -106,7 +112,8 @@ Inside the modal, use Vim motions to move, `v` or `V` to select, and `y` to copy
 `H`, `M`, and `L` jump to the top, middle, and bottom of the visible area;
 counts move one line further inward and the viewport stays in place.
 `Ctrl+d` and `Ctrl+u` scroll half a page; `Ctrl+f`, `Ctrl+b`, Page Down, and
-Page Up scroll a full page.
+Page Up scroll a full page. `Ctrl+v` selects a block for `y`; as in the prompt,
+its multi-line highlight is linear but the copied text is the rectangle.
 `/` and `?` search the focused section and `n`/`N` move between matches; `y`
 copies the current match. Search results use the text color instead of a
 background so wide characters stay fully covered. `Esc` first clears an active

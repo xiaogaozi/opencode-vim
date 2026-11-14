@@ -136,6 +136,39 @@ async function waitForEditor(
   }
 }
 
+export async function promptVisualBlock({ terminal }: Fixture) {
+  const { keys, paste, type, screen } = terminal
+
+  await keys("i")
+  await paste("abcd\nefgh\nijkl")
+  await screen("pasted", (screen) => screen.includes("ijkl"))
+  await keys("Escape", "gg")
+  await screen("top", (screen) => screen.includes("abcd") && screen.includes("NORMAL"))
+
+  await keys("C-v")
+  await screen("visual-block", (screen) => screen.includes("VISUAL BLOCK"))
+  await type("ljj")
+  await type("y")
+  await screen(
+    "block-yank",
+    (screen) => screen.includes("NORMAL") && !screen.includes("VISUAL BLOCK") && terminal.clipboard() === "ab\nef\nij",
+  )
+
+  await keys("C-v")
+  await screen("visual-block-again", (screen) => screen.includes("VISUAL BLOCK"))
+  await type("ljj")
+  await type("d")
+  await screen(
+    "block-delete",
+    (screen) =>
+      screen.includes("NORMAL") &&
+      !screen.includes("VISUAL BLOCK") &&
+      screen.includes("cd") &&
+      screen.includes("gh") &&
+      screen.includes("kl"),
+  )
+}
+
 export async function promptHistory(fixture: Fixture) {
   const { terminal } = fixture
   const { keys, type, screen } = terminal
