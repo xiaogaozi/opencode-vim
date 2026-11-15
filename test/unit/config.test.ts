@@ -24,3 +24,11 @@ test("listContinuation is enabled unless explicitly disabled", () => {
   expect(createVimConfig({ vim: { listContinuation: { enabled: false } } }).listContinuation.enabled).toBe(false)
   expect(createVimConfig({ listContinuation: { enabled: "no" } }).listContinuation.enabled).toBe(true)
 })
+
+test("completionScroll is enabled unless explicitly disabled", () => {
+  expect(createVimConfig({}).completionScroll.enabled).toBe(true)
+  expect(createVimConfig({ vim: { completionScroll: {} } }).completionScroll.enabled).toBe(true)
+  expect(createVimConfig({ vim: { completionScroll: { enabled: true } } }).completionScroll.enabled).toBe(true)
+  expect(createVimConfig({ vim: { completionScroll: { enabled: false } } }).completionScroll.enabled).toBe(false)
+  expect(createVimConfig({ completionScroll: { enabled: "no" } }).completionScroll.enabled).toBe(true)
+})

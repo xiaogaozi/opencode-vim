@@ -34,6 +34,11 @@ inside a message reader.
 Subagent entries open the full saved response, with Vim navigation, selection,
 and copying. Background completion entries use the same reader.
 
+When a reply finishes, the transcript moves to the start of its final text so
+long answers can be read from the top without scrolling. This only happens when
+the view was following the bottom; disable it with
+`options.vim.completionScroll.enabled`.
+
 Use `/vim` to toggle the plugin on or off.
 
 Optional input method (IME) switching, inline English regions, a which-key

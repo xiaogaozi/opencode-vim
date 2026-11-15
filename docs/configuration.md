@@ -35,6 +35,7 @@ All options below belong inside `options.vim`.
 | `keymaps` | `{}` | Custom mappings, grouped by mode; values may be action chains |
 | `whichKey` | disabled | Pending-keymap popup listing the available shortcuts; see below |
 | `listContinuation` | enabled | Continue Markdown list markers on prompt newlines and `o`/`O`; see below |
+| `completionScroll` | enabled | Align the start of a finished reply with the top of the transcript; see below |
 | `cursorStyles` | See below | Cursor appearance for each editing mode |
 | `inputSource` | disabled | Switch the OS input method per editing mode; see below |
 | `inline` | disabled | Double-space inline English region; see below |
@@ -119,6 +120,24 @@ Set `enabled` to `false` to stop inserting list markers:
 ```json
 {
   "listContinuation": { "enabled": false }
+}
+```
+
+### Completion scroll
+
+When a model turn finishes, the transcript aligns the first line of the final
+assistant text with the top of the viewport, so a long reply can be read from
+the beginning without scrolling back manually. It only acts when the transcript
+was following the bottom when the turn ended. If you scrolled up during
+generation, if the reply already fits on screen, or while session browsing,
+dialogs, permission requests, or question forms are open, the viewport is left
+alone. A user-interrupted turn does not move the viewport either.
+
+Set `enabled` to `false` to keep the previous bottom-following behavior:
+
+```json
+{
+  "completionScroll": { "enabled": false }
 }
 ```
 
