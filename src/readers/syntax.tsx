@@ -103,8 +103,10 @@ export async function highlightCode(
   }
   const map = createPromptMap(text, undefined, widthMethod)
   const excluded = options.exclude?.map((range) => ({
-    start: highlightOffset(clampOffset(range.start, text.length)),
-    end: highlightOffset(clampOffset(range.end, text.length)),
+    // Extmarks use the prompt's display-offset coordinates, including the
+    // extra columns occupied by CJK characters.
+    start: extmarkOffset(range.start),
+    end: extmarkOffset(range.end),
   }))
   const ranges: Array<{ start: number; end: number; styleId: number; priority: number }> = []
   for (const [start, end, scope] of result.highlights) {
@@ -145,6 +147,11 @@ export async function highlightCode(
     // Tree-sitter may point past the text when it appends a streaming newline.
     const offset = map.vimToDisplay[map.hostToVim[clampOffset(index, text.length)]]
     // Highlight ranges exclude newlines; editor cursor offsets include them.
+    return offset - hostPosition(map, offset).line
+  }
+
+  function extmarkOffset(index: number) {
+    const offset = clampOffset(index, map.displayWidth)
     return offset - hostPosition(map, offset).line
   }
 }

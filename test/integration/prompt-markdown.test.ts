@@ -4,6 +4,7 @@ import { SyntaxStyle, TextareaRenderable, getTreeSitterClient } from "@opentui/c
 import { createTestRenderer } from "@opentui/core/testing"
 import { createRoot } from "solid-js"
 import { createPromptMarkdown, PROMPT_MARKDOWN_HL_REF } from "../../src/ui/prompt-markdown"
+import { charToDisplay } from "../../src/vim/map"
 import { testTheme } from "../helpers/theme"
 
 let destroy: (() => void) | undefined
@@ -70,6 +71,75 @@ test("host paste placeholders keep their own style", async () => {
     )
     expect(input.plainText).toBe(text)
     expect(input.syntaxStyle).toBe(hostStyle)
+  } finally {
+    manager.dispose()
+    disposeRoot()
+    highlighting.mockRestore()
+    input.editBuffer.setSyntaxStyle(null)
+    hostStyle.destroy()
+  }
+})
+
+test("CJK and list prefixes keep paste placeholders protected", async () => {
+  const screen = await createTestRenderer({ width: 60, height: 10 })
+  destroy = () => screen.renderer.destroy()
+  const text = "- 测试：\n\n[Pasted ~11 lines]"
+  const input = new TextareaRenderable(screen.renderer, {
+    id: "prompt",
+    initialValue: text,
+    width: 56,
+    height: 8,
+    wrapMode: "word",
+    showCursor: true,
+  })
+  screen.renderer.root.add(input)
+  input.focus()
+  const hostStyle = SyntaxStyle.fromStyles(
+    {
+      default: { fg: "#ffffff" },
+      "extmark.paste": { fg: "#000000", bg: "#ffff00", bold: true },
+      "markup.link": { fg: "#0000ff", underline: true },
+      "markup.link.label": { fg: "#00ffff", underline: true },
+    },
+    screen.renderer.nativeScene,
+  )
+  input.syntaxStyle = hostStyle
+  const typeId = input.extmarks.registerType("prompt-part")
+  input.extmarks.create({
+    // Host extmarks use display offsets, so CJK before the placeholder shifts them.
+    start: charToDisplay(text, text.indexOf("[Pasted"), screen.renderer.widthMethod),
+    end: charToDisplay(text, text.length, screen.renderer.widthMethod),
+    virtual: true,
+    styleId: hostStyle.getStyleId("extmark.paste")!,
+    typeId,
+  })
+  await screen.renderOnce()
+
+  const open = text.indexOf("[")
+  const close = text.indexOf("]")
+  const highlighting = spyOn(getTreeSitterClient(), "highlightOnce").mockResolvedValue({
+    highlights: [
+      [open, open + 1, "markup.link"],
+      [open + 1, close, "markup.link.label"],
+      [close, close + 1, "markup.link"],
+    ],
+  })
+  let disposeRoot!: () => void
+  let manager!: ReturnType<typeof createPromptMarkdown>
+  createRoot((dispose) => {
+    disposeRoot = dispose
+    manager = createPromptMarkdown({ renderer: screen.renderer, theme: testTheme() } as unknown as Context, {
+      delay: 0,
+    })
+  })
+  try {
+    manager.attach(input)
+    await Bun.sleep(10)
+    expect(highlighting).toHaveBeenCalledWith(text, "markdown")
+    expect(input.editBuffer.getLineHighlights(2).some((highlight) => highlight.hlRef === PROMPT_MARKDOWN_HL_REF)).toBe(
+      false,
+    )
+    expect(input.plainText).toBe(text)
   } finally {
     manager.dispose()
     disposeRoot()

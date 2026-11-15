@@ -3,6 +3,8 @@ import type { Fixture } from "../support/fixture"
 
 export async function promptPastePlaceholder({ terminal, probe }: Fixture) {
   const colors = (await probe()).colors
+  await terminal.type(" - 测试：")
+  await terminal.keys("C-j", "C-j")
   const text = Array.from({ length: 21 }, (_, index) => `line ${index + 1}`).join("\n")
   await terminal.paste(text)
   await terminal.screen("paste-placeholder", (screen) => screen.includes("[Pasted ~21 lines]"))
