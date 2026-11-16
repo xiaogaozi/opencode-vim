@@ -1,3 +1,4 @@
+// TSX ensures the plugin loader shares the host's OpenTUI classes.
 import type { Context, Route } from "@opencode/plugin/tui/context"
 import { ScrollBoxRenderable, type Renderable } from "@opentui/core"
 import { createEffect, onCleanup } from "solid-js"
