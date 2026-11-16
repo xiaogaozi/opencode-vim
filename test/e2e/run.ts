@@ -42,6 +42,7 @@ import { transcriptLayout, transcriptPartial, transcriptParts, sessionCopy } fro
 import { layoutMessages, partialMessages, partMessages, copyMessages, longReaderMessages } from "./data/navigation"
 import { transcriptLive } from "./scenarios/transcript-live"
 import { completionScroll } from "./scenarios/completion-scroll"
+import { completionScrollBackground } from "./scenarios/completion-scroll-background"
 import { pluginLifecycle } from "./scenarios/plugin-lifecycle"
 import {
   promptClipboard,
@@ -120,6 +121,11 @@ const scenarios: Array<{
     name: "completion-scroll",
     run: completionScroll,
     setup: { stream: completionReply, cli: { animations: false } },
+  },
+  {
+    name: "completion-scroll-background",
+    run: completionScrollBackground,
+    setup: { stream: completionReply, probe: true, cli: { animations: false } },
   },
   { name: "tab-switching", run: tabSwitching },
   { name: "dialog-focus", run: dialogFocus, setup: { probe: true } },

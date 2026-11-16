@@ -1,6 +1,6 @@
-import type { Context } from "@opencode/plugin/tui/context"
+import type { Context, Route } from "@opencode/plugin/tui/context"
 import { ScrollBoxRenderable, type Renderable } from "@opentui/core"
-import { onCleanup } from "solid-js"
+import { createEffect, onCleanup } from "solid-js"
 import { transcriptItems } from "../transcript-items"
 import type { VimConfig } from "../vim/config"
 import type { VimLog } from "../vim/log"
@@ -8,6 +8,10 @@ import { atTranscriptBottom, finalReplyAnchor, finalReplyMessage, replyScrollTar
 
 const SETTLE_FRAMES = 40
 const STABLE_FRAMES = 2
+const RESTORE_WAIT_MS = 1500
+const RESTORE_TIMEOUT_MS = 3000
+
+type AlignMode = "completion" | "restore"
 
 type CompletionScrollOptions = {
   enabled: () => boolean
@@ -23,9 +27,13 @@ type CompletionScrollOptions = {
 export function createCompletionScroll(context: Context, config: VimConfig, options: CompletionScrollOptions) {
   let generation = 0
   let disposed = false
+  const pending = new Set<string>()
+  let routed = routeSession(context.ui.router.current())
   const unsubscribe = [
     context.data.on("session.execution.succeeded", (event) => schedule(event.data.sessionID)),
     context.data.on("session.execution.failed", (event) => schedule(event.data.sessionID)),
+    context.data.on("session.execution.started", (event) => pending.delete(event.data.sessionID)),
+    context.data.on("session.deleted", (event) => pending.delete(event.data.sessionID)),
   ]
 
   onCleanup(() => {
@@ -34,11 +42,28 @@ export function createCompletionScroll(context: Context, config: VimConfig, opti
     for (const off of unsubscribe) off()
   })
 
-  function schedule(sessionID: string) {
-    if (disposed || !config.completionScroll.enabled) return
-    options.log("completion.schedule", { sessionID })
+  createEffect(() => {
+    const sessionID = routeSession(context.ui.router.current())
+    if (sessionID === routed) return
+    routed = sessionID
+    if (!sessionID || !pending.has(sessionID)) return
     const current = ++generation
-    void align(current, sessionID)
+    void align(current, sessionID, "restore")
+  })
+
+  function schedule(sessionID: string) {
+    if (disposed || !config.completionScroll.enabled || !options.enabled()) return
+    const route = context.ui.router.current()
+    if (route.type === "session" && route.sessionID === sessionID) {
+      pending.delete(sessionID)
+      options.log("completion.schedule", { sessionID })
+      const current = ++generation
+      void align(current, sessionID, "completion")
+      return
+    }
+    if (pending.has(sessionID)) return
+    pending.add(sessionID)
+    options.log("completion.pending", { sessionID })
   }
 
   function active(token: number, sessionID: string) {
@@ -51,21 +76,31 @@ export function createCompletionScroll(context: Context, config: VimConfig, opti
     return true
   }
 
-  async function align(token: number, sessionID: string) {
-    const messageIDs = new Set(context.data.session.message.list(sessionID).map((item) => item.id))
+  async function align(token: number, sessionID: string, mode: AlignMode) {
+    let messageIDs = new Set<string>()
+    let messageCount = -1
+    const deadline = Date.now() + (mode === "restore" ? RESTORE_TIMEOUT_MS : 0)
     let height = -1
     let stable = 0
-    for (let frame = 0; frame < SETTLE_FRAMES; frame++) {
+    let seenAt: number | undefined
+    let runningLogged = false
+    for (let frame = 0; frame < SETTLE_FRAMES || Date.now() < deadline; frame++) {
       await nextFrame()
-      if (!active(token, sessionID)) {
-        options.log("completion.inactive", { frame })
+      if (!active(token, sessionID) || (mode === "restore" && !pending.has(sessionID))) {
+        options.log("completion.inactive", { frame, mode })
         return
+      }
+      const messages = context.data.session.message.list(sessionID)
+      if (messages.length !== messageCount) {
+        messageCount = messages.length
+        messageIDs = new Set(messages.map((item) => item.id))
       }
       const scroll = findScroll(messageIDs)
       if (!scroll) {
-        if (frame === 0) options.log("completion.scroll.missing")
+        if (frame === 0) options.log("completion.scroll.missing", { mode })
         continue
       }
+      seenAt ??= Date.now()
       if (
         !atTranscriptBottom({
           scrollTop: scroll.scrollTop,
@@ -73,13 +108,26 @@ export function createCompletionScroll(context: Context, config: VimConfig, opti
           viewportHeight: scroll.viewport.height,
         })
       ) {
-        options.log("completion.away", {
-          frame,
-          scrollTop: scroll.scrollTop,
-          scrollHeight: scroll.scrollHeight,
-          viewportHeight: scroll.viewport.height,
-        })
-        return
+        if (mode === "completion") {
+          options.log("completion.away", {
+            frame,
+            scrollTop: scroll.scrollTop,
+            scrollHeight: scroll.scrollHeight,
+            viewportHeight: scroll.viewport.height,
+          })
+          return
+        }
+        if (Date.now() - seenAt >= RESTORE_WAIT_MS) {
+          options.log("completion.restore.away", {
+            frame,
+            scrollTop: scroll.scrollTop,
+            scrollHeight: scroll.scrollHeight,
+            viewportHeight: scroll.viewport.height,
+          })
+          pending.delete(sessionID)
+          return
+        }
+        continue
       }
       if (scroll.scrollHeight === height) stable++
       else {
@@ -88,23 +136,31 @@ export function createCompletionScroll(context: Context, config: VimConfig, opti
       }
       if (stable < STABLE_FRAMES) continue
       if (context.data.session.status(sessionID) !== "idle") {
-        options.log("completion.running", { frame })
+        if (!runningLogged) {
+          options.log("completion.running", { frame, mode })
+          runningLogged = true
+        }
+        if (mode === "restore") continue
         return
       }
-      if (scrollToReply(scroll, sessionID)) return
+      if (scrollToReply(scroll, sessionID)) {
+        if (mode === "restore") pending.delete(sessionID)
+        return
+      }
     }
-    options.log("completion.settle.timeout")
+    options.log("completion.settle.timeout", { mode })
+    if (mode === "restore") pending.delete(sessionID)
   }
 
   function scrollToReply(scroll: ScrollBoxRenderable, sessionID: string) {
     const messages = context.data.session.message.list(sessionID)
     const message = finalReplyMessage(messages)
     if (!message) return false
-    const pending = new Set<string>()
+    const pendingTools = new Set<string>()
     for (const request of context.data.session.permission.list(sessionID) ?? []) {
-      if (request.source?.type === "tool") pending.add(request.source.id)
+      if (request.source?.type === "tool") pendingTools.add(request.source.id)
     }
-    const { ranges } = transcriptItems(scroll.getChildren(), messages, pending)
+    const { ranges } = transcriptItems(scroll.getChildren(), messages, pendingTools)
     const anchor = finalReplyAnchor(ranges, message.id)
     if (!anchor) return false
     const slack = scroll.getRenderable("session-navigation-slack")?.height ?? 0
@@ -157,4 +213,8 @@ export function createCompletionScroll(context: Context, config: VimConfig, opti
       setTimeout(tick, 8)
     })
   }
+}
+
+function routeSession(route: Route) {
+  return route.type === "session" ? route.sessionID : undefined
 }

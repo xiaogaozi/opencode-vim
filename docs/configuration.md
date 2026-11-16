@@ -133,6 +133,11 @@ generation, if the reply already fits on screen, or while session browsing,
 dialogs, permission requests, or question forms are open, the viewport is left
 alone. A user-interrupted turn does not move the viewport either.
 
+If a turn finishes while you are viewing another session, returning to the
+finished session applies the same alignment once the host has restored that
+session's transcript. If you had left the session away from the bottom, its
+position is preserved instead.
+
 Set `enabled` to `false` to keep the previous bottom-following behavior:
 
 ```json

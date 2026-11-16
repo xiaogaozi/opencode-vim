@@ -36,7 +36,8 @@ and copying. Background completion entries use the same reader.
 
 When a reply finishes, the transcript moves to the start of its final text so
 long answers can be read from the top without scrolling. This only happens when
-the view was following the bottom; disable it with
+the view was following the bottom, including after switching back to a session
+whose reply finished in the background. Disable it with
 `options.vim.completionScroll.enabled`.
 
 Use `/vim` to toggle the plugin on or off.
