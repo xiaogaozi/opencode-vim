@@ -16,6 +16,7 @@ import { createVimeeAdapter, historyCursorMode } from "./vim/vimee"
 import { VimStatus } from "./vim/status"
 import { SESSION_MODE, createSessionMode } from "./ui/session"
 import { pageMotion } from "./ui/session-keys"
+import { createCompletionScroll } from "./ui/completion-scroll"
 import { createVimClipboard } from "./clipboard"
 import { createFormMode } from "./ui/form"
 import { handleComposerKey } from "./ui/composer"
@@ -68,6 +69,11 @@ function VimHost(props: { context: Context }) {
   let cursorInput: typeof props.context.renderer.currentFocusedEditor = null
   const cursorPin = createCursorStylePin()
   const session = createSessionMode(props.context, config, clipboard)
+  createCompletionScroll(props.context, config, {
+    enabled,
+    blocked: () => session.active() || dialogFocused(),
+    log,
+  })
   const terminal = createTerminalControls(
     props.context,
     config,
