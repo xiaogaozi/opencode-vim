@@ -41,6 +41,8 @@ import { emptySession, sessionControls, sessionKeyConflict, sessionLifecycle } f
 import { transcriptLayout, transcriptPartial, transcriptParts, sessionCopy } from "./scenarios/transcript-layout"
 import { layoutMessages, partialMessages, partMessages, copyMessages, longReaderMessages } from "./data/navigation"
 import { transcriptLive } from "./scenarios/transcript-live"
+import { completionScroll } from "./scenarios/completion-scroll"
+import { completionScrollBackground } from "./scenarios/completion-scroll-background"
 import { pluginLifecycle } from "./scenarios/plugin-lifecycle"
 import {
   promptClipboard,
@@ -68,6 +70,8 @@ import {
   terminalBindingsDisabled,
   terminalBindingOverride,
 } from "./scenarios/terminal"
+
+const completionReply = Array.from({ length: 80 }, (_, index) => `Reply line ${index}`).join("\n")
 
 const scenarios: Array<{
   name: string
@@ -112,6 +116,16 @@ const scenarios: Array<{
     name: "prompt-hidden-mode",
     run: promptHiddenMode,
     setup: { vim: { modeIndicator: "none", cursorStyles: { insert: { style: "underline", blinking: false } } } },
+  },
+  {
+    name: "completion-scroll",
+    run: completionScroll,
+    setup: { stream: completionReply, cli: { animations: false } },
+  },
+  {
+    name: "completion-scroll-background",
+    run: completionScrollBackground,
+    setup: { stream: completionReply, probe: true, cli: { animations: false } },
   },
   { name: "tab-switching", run: tabSwitching },
   { name: "dialog-focus", run: dialogFocus, setup: { probe: true } },

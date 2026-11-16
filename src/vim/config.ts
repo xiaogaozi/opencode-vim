@@ -21,6 +21,10 @@ export type VimListContinuation = {
   enabled: boolean
 }
 
+export type VimCompletionScroll = {
+  enabled: boolean
+}
+
 export type VimConfig = {
   defaultMode: VimMode
   diffView: DiffView
@@ -32,6 +36,7 @@ export type VimConfig = {
   inline: VimInline
   whichKey: VimWhichKey
   listContinuation: VimListContinuation
+  completionScroll: VimCompletionScroll
   debug: boolean
   debugPath?: string
   keymaps: VimKeymaps
@@ -48,6 +53,7 @@ export type VimOptions = {
   inline?: VimInline
   whichKey?: VimWhichKey
   listContinuation?: VimListContinuation
+  completionScroll?: VimCompletionScroll
   debug?: boolean
   debugPath?: string
   keymaps?: VimKeymaps
@@ -81,6 +87,8 @@ const DEFAULT_WHICH_KEY: VimWhichKey = { enabled: false }
 
 const DEFAULT_LIST_CONTINUATION: VimListContinuation = { enabled: true }
 
+const DEFAULT_COMPLETION_SCROLL: VimCompletionScroll = { enabled: true }
+
 export function createVimConfig(options: unknown): VimConfig {
   const input = readOptions(options)
   return {
@@ -103,6 +111,7 @@ export function createVimConfig(options: unknown): VimConfig {
     inline: input.inline ?? DEFAULT_INLINE,
     whichKey: input.whichKey ?? DEFAULT_WHICH_KEY,
     listContinuation: input.listContinuation ?? DEFAULT_LIST_CONTINUATION,
+    completionScroll: input.completionScroll ?? DEFAULT_COMPLETION_SCROLL,
     debug: input.debug ?? process.env.VIM_PROMPT_DEBUG === "1",
     debugPath: input.debugPath,
     keymaps: input.keymaps ?? {},
@@ -130,6 +139,7 @@ function readOptions(options: unknown): VimOptions {
     inline: readInline(source.inline),
     whichKey: readWhichKey(source.whichKey),
     listContinuation: readListContinuation(source.listContinuation),
+    completionScroll: readCompletionScroll(source.completionScroll),
     debug: typeof source.debug === "boolean" ? source.debug : undefined,
     debugPath: typeof source.debugPath === "string" ? source.debugPath : undefined,
     keymaps: readKeymaps(source.keymaps),
@@ -208,6 +218,12 @@ function readWhichKey(input: unknown): VimWhichKey | undefined {
 }
 
 function readListContinuation(input: unknown): VimListContinuation | undefined {
+  if (!input || typeof input !== "object") return undefined
+  const source = input as Record<string, unknown>
+  return { enabled: typeof source.enabled === "boolean" ? source.enabled : true }
+}
+
+function readCompletionScroll(input: unknown): VimCompletionScroll | undefined {
   if (!input || typeof input !== "object") return undefined
   const source = input as Record<string, unknown>
   return { enabled: typeof source.enabled === "boolean" ? source.enabled : true }
