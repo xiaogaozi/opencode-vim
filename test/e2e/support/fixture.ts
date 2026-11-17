@@ -30,6 +30,8 @@ export type FixtureSetup = {
   stream?: string
   probe?: boolean
   delayedClipboard?: boolean
+  /** Slash commands for the server, as `<name>` to Markdown content. */
+  commands?: Record<string, string>
 }
 
 type Options = FixtureSetup & {
@@ -93,6 +95,13 @@ export async function runWithFixture(options: Options, run: (fixture: Fixture) =
     await mkdir(workspace, { recursive: true })
     for (const home of ["server", "tui"]) {
       await mkdir(path.join(directory, home, "config"), { recursive: true })
+    }
+    if (options.commands) {
+      const commands = path.join(directory, "server", "config", "commands")
+      await mkdir(commands, { recursive: true })
+      for (const [name, content] of Object.entries(options.commands)) {
+        await Bun.write(path.join(commands, `${name}.md`), content)
+      }
     }
     assert.equal(
       execFileSync(opencode.binary, ["--version"], { env: environment("server"), encoding: "utf8" }).trim(),

@@ -228,6 +228,7 @@ const scenarios: Array<{
     run: keymapChains,
     setup: {
       stream: "chain response",
+      commands: { "chain-slash": "---\ndescription: chain slash command\n---\ncommand template ran\n" },
       vim: {
         defaultMode: "normal",
         keymapTimeout: 5000,
@@ -235,6 +236,7 @@ const scenarios: Array<{
           normal: {
             "<C-g>n": ["insert", "text:chain submit", "agent:build", "submit"],
             "<C-g>s": ["insert", "text:/chain-slash", "agent:build", "submit"],
+            "<C-g>x": ["insert", "text:/missing-slash", "agent:build", "submit"],
           },
           insert: { "<C-s>": "submit" },
         },
