@@ -602,13 +602,25 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
       // submit path and its client-side agent selection, so send through the
       // session API when the host supports it.
       if (ctx.sendPrompt) {
-        const sent = ctx.sendPrompt(chain.agent, { agentSwitched: chain.agent !== undefined })
+        let sent: boolean | Promise<boolean>
+        try {
+          sent = ctx.sendPrompt(chain.agent, { agentSwitched: chain.agent !== undefined })
+        } catch (error) {
+          log("vimee.keybind.send", { error: error instanceof Error ? error.message : String(error) })
+          return "abort"
+        }
         if (sent instanceof Promise) {
-          return sent.then((ok) => {
-            if (ok) return true
-            ctx.submit()
-            return true
-          })
+          return sent.then(
+            (ok) => {
+              if (ok) return true
+              ctx.submit()
+              return true
+            },
+            (error) => {
+              log("vimee.keybind.send", { error: error instanceof Error ? error.message : String(error) })
+              return false
+            },
+          )
         }
         if (sent) return map
       }

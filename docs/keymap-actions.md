@@ -91,8 +91,10 @@ spaces, punctuation, newlines and non-ASCII text need no key notation.
 `["agent:build", "text:go", "submit"]`. A chain's `submit` sends the prompt
 through OpenCode's session API — the same path the host uses for slash commands —
 because the text is inserted programmatically and the host's own submit path
-replaces the pinned agent with its client-side selection. A slash payload runs its
-command when it exists and is sent as a prompt otherwise.
+replaces the pinned agent with its client-side selection. Slash text runs its
+command; text that names no command is sent as a prompt. If a command fails, the
+chain aborts and leaves the text in the input instead of sending it as plain
+prompt text.
 
 A `submit` action that is not a chain step (for example `"<C-s>": "submit"`) uses
 the host's submit path, and closes OpenCode's prompt completion first: while a

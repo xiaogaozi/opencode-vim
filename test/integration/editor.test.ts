@@ -496,6 +496,18 @@ describe("real textarea Vim editing", () => {
     expect(fixture.submissions).toBe(0)
   })
 
+  test("aborts a chain when sending fails", async () => {
+    fixture = await createFixture("", { keymaps: { normal: { Q: ["text:/commit-and-push", "submit"] } } }, 80, {
+      sendPrompt: () => {
+        throw new Error("CommandExecutionError: boom")
+      },
+    })
+
+    await fixture.keys("Q")
+    expect(fixture.input.plainText).toBe("/commit-and-push")
+    expect(fixture.submissions).toBe(0)
+  })
+
   test("cancels an action chain when the editor changes during the agent switch", async () => {
     let settle = (_: boolean) => {}
     const pending = new Promise<boolean>((resolve) => {

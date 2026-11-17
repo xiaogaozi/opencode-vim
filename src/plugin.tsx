@@ -637,27 +637,48 @@ async function sendPrompt(
     // A chain's `agent:` step already switched; switching again here would add
     // a second `agent-switched` line to the transcript.
     if (agent && !options.agentSwitched && !(await switchAgent(context, agent))) return false
+    // Run slash text as its command. The command list endpoint omits custom
+    // commands, so ask the server and keep only unknown text a prompt.
     const slash = /^\/(\S+)\s*([\s\S]*)$/.exec(text)
-    // Unknown slash text stays a prompt, matching the host's own submit path.
-    if (slash && (await commandNames(context)).includes(slash[1])) {
-      await context.client.session.command({ sessionID: route.sessionID, name: slash[1], text: slash[2] })
-    } else {
+    if (!slash || !(await runCommand(context, route.sessionID, slash[1], slash[2], log))) {
       await context.client.session.prompt({ sessionID: route.sessionID, text })
     }
     clearPrompt(context, input)
     return true
   } catch (error) {
-    log("vim.prompt.send.error", { error: error instanceof Error ? error.message : String(error), agent })
+    log("vim.prompt.send.error", {
+      error: error instanceof Error ? error.message : String(error),
+      agent,
+      text: text.slice(0, 60),
+    })
+    // Keep the text in the prompt: a failed command must not go out as plain text.
+    throw error
+  }
+}
+
+/** Runs a slash command and reports whether it exists. */
+async function runCommand(
+  context: Context,
+  sessionID: string,
+  name: string,
+  text: string,
+  log: ReturnType<typeof createVimLog>,
+) {
+  try {
+    await context.client.session.command({ sessionID, name, text })
+    return true
+  } catch (error) {
+    if (!isCommandNotFound(error)) throw error
+    log("vim.prompt.command.missing", { name })
     return false
   }
 }
 
-async function commandNames(context: Context) {
-  try {
-    return ((await context.client.command.list()).data ?? []).map((item) => item.name)
-  } catch {
-    return []
-  }
+function isCommandNotFound(error: unknown) {
+  return (
+    (error as { name?: string } | undefined)?.name === "CommandNotFoundError" ||
+    /Command not found/i.test(String(error))
+  )
 }
 
 function clearPrompt(context: Context, input: Context["renderer"]["currentFocusedEditor"]) {

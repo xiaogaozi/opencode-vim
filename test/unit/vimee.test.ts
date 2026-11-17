@@ -280,6 +280,48 @@ describe("vim keymap action chains", () => {
     expect(fixture.submissions).toHaveLength(0)
   })
 
+  test("aborts instead of falling back when sending fails", async () => {
+    const logs: Array<[string, unknown]> = []
+    const fixture = createFixture(
+      "normal",
+      ["text:/commit-and-push", "submit"],
+      "",
+      (event, data) => logs.push([event, data]),
+      "Q",
+      undefined,
+      () => {
+        throw new Error("CommandExecutionError: boom")
+      },
+    )
+
+    const result = fixture.handle()
+    if (result instanceof Promise) await result
+
+    expect(fixture.submissions).toHaveLength(0)
+    expect(fixture.input.plainText).toBe("/commit-and-push")
+    expect(logs.some(([event]) => event === "vimee.keybind.send")).toBe(true)
+  })
+
+  test("aborts when sending rejects", async () => {
+    const fixture = createFixture(
+      "normal",
+      ["text:/commit-and-push", "submit"],
+      "",
+      () => {},
+      "Q",
+      undefined,
+      async () => {
+        throw new Error("boom")
+      },
+    )
+
+    const result = fixture.handle()
+    if (result instanceof Promise) await result
+
+    expect(fixture.submissions).toHaveLength(0)
+    expect(fixture.input.plainText).toBe("/commit-and-push")
+  })
+
   test("aborts a synchronous chain when the agent switch fails", async () => {
     const fixture = createFixture(
       "normal",
