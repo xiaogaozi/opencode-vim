@@ -35,6 +35,7 @@ All options below belong inside `options.vim`.
 | `keymaps` | `{}` | Custom mappings, grouped by mode; values may be action chains |
 | `whichKey` | disabled | Pending-keymap popup listing the available shortcuts; see below |
 | `listContinuation` | enabled | Continue Markdown list markers on prompt newlines and `o`/`O`; see below |
+| `autoPairs` | disabled | Complete paired punctuation in insert mode; see below |
 | `completionScroll` | enabled | Align the start of a finished reply with the top of the transcript; see below |
 | `cursorStyles` | See below | Cursor appearance for each editing mode |
 | `inputSource` | disabled | Switch the OS input method per editing mode; see below |
@@ -122,6 +123,40 @@ Set `enabled` to `false` to stop inserting list markers:
   "listContinuation": { "enabled": false }
 }
 ```
+
+### Auto pairs
+
+`autoPairs` completes paired punctuation while typing in insert mode in the
+prompt and question dialogs. Typing an opening character inserts its closing
+counterpart and leaves the cursor between them. Typing the closing character
+when it already follows the cursor moves over it, and `Backspace` between an
+empty pair removes both characters.
+
+The defaults are `「」`, `『』`, `（）`, `《》`, `【】`, `〈〉`, `()`, `[]`, `{}`, and
+`<>`. Enable them with:
+
+```json
+{
+  "autoPairs": { "enabled": true }
+}
+```
+
+`pairs` replaces the default list. Each entry is an opening character followed by
+its closing character, either as a two-character string or as a two-element
+array. Invalid entries are ignored, and an empty list disables completion while
+leaving the option enabled:
+
+```json
+{
+  "autoPairs": {
+    "enabled": true,
+    "pairs": ["「」", ["(", ")"]]
+  }
+}
+```
+
+Auto pairs only handle single-key typing without modifiers, skip selections and
+pasted text, and leave matching insert-mode keymaps in control.
 
 ### Completion scroll
 

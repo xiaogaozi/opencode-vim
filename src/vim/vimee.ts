@@ -9,6 +9,7 @@ import {
   resolveMotion,
 } from "@vimee/core"
 import type { CursorPosition, KeybindDefinition, MotionRange, VimAction as VimeeAction, VimContext } from "@vimee/core"
+import { autoPairAction } from "./auto-pairs"
 import type { EditorInput, EditorContext } from "./editor"
 import type { VimConfig } from "./config"
 import type { VimLog } from "./log"
@@ -154,6 +155,7 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
         if (handled) return handled
         if (options.listContinuation && !options.readOnly && isNewlineKey(event) && continueMarkdownList(ctx))
           return true
+        if (handleAutoPair(event, key, ctx)) return true
         return false
       }
 
@@ -832,6 +834,44 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
     if (!input) return
     const map = mapForHostText(input.plainText)
     sync(hostPosition(map, clamp(input.cursorOffset, 0, map.displayWidth)))
+  }
+
+  /** Completes a punctuation pair in insert mode, keeping native handling otherwise. */
+  function handleAutoPair(event: KeyEvent, key: string, ctx: EditorContext): boolean {
+    if (!config.autoPairs.enabled || options.readOnly) return false
+    if (event.ctrl || event.meta || event.option || event.super) return false
+    const input = ctx.input()
+    if (!input || input.isDestroyed) return false
+    if (input.hasSelection?.()) return false
+
+    const text = input.plainText
+    const cursor = displayToChar(text, Math.max(0, input.cursorOffset), widthMethod)
+    const action = autoPairAction(key, text.slice(0, cursor), text.slice(cursor), config.autoPairs.pairs)
+    if (!action) return false
+
+    const before = text.slice(0, cursor)
+    if (action.type === "insert") {
+      if (input.insertText) input.insertText(action.open + action.close)
+      else ctx.setText(before + action.open + action.close + text.slice(cursor))
+      const inside = before + action.open
+      input.cursorOffset = charToDisplay(inside, inside.length, widthMethod)
+      log("vimee.autopair", { action: "insert", key })
+      return true
+    }
+
+    if (action.type === "skip") {
+      const past = text.slice(0, cursor + action.close.length)
+      input.cursorOffset = charToDisplay(past, past.length, widthMethod)
+      log("vimee.autopair", { action: "skip", key })
+      return true
+    }
+
+    const start = cursor - action.open.length
+    ctx.setText(text.slice(0, start) + text.slice(cursor + action.close.length))
+    const remaining = text.slice(0, start)
+    input.cursorOffset = charToDisplay(remaining, remaining.length, widthMethod)
+    log("vimee.autopair", { action: "backspace", key })
+    return true
   }
 
   function handleInsertKeybind(event: KeyEvent, key: string, ctx: EditorContext): boolean | Promise<boolean> {
