@@ -42,6 +42,8 @@ export function keyForVimee(event: KeyEvent, key: string) {
   if (key === "<C-[>") return "Escape"
   if (event.ctrl) return event.name?.toLowerCase()
   const token = keyToken(key)
+  // A literal "<" is not key notation; it is the Vim shift operator.
+  if (token === "<") return token
   return token.startsWith("<") ? undefined : token
 }
 
