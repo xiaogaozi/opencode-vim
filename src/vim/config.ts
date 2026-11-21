@@ -1,4 +1,6 @@
 import { parseKeySequence } from "@vimee/core"
+import { DEFAULT_AUTO_PAIRS_CONFIG, readAutoPairs } from "./auto-pairs"
+import type { VimAutoPairs } from "./auto-pairs"
 import { DEFAULT_INPUT_SOURCE, readInputSource } from "./input-source-config"
 import type { VimInputSource } from "./input-source-config"
 import { DEFAULT_INLINE, DEFAULT_INLINE_TIMEOUT_MS } from "./inline"
@@ -37,6 +39,7 @@ export type VimConfig = {
   whichKey: VimWhichKey
   listContinuation: VimListContinuation
   completionScroll: VimCompletionScroll
+  autoPairs: VimAutoPairs
   debug: boolean
   debugPath?: string
   keymaps: VimKeymaps
@@ -54,6 +57,7 @@ export type VimOptions = {
   whichKey?: VimWhichKey
   listContinuation?: VimListContinuation
   completionScroll?: VimCompletionScroll
+  autoPairs?: VimAutoPairs
   debug?: boolean
   debugPath?: string
   keymaps?: VimKeymaps
@@ -112,6 +116,7 @@ export function createVimConfig(options: unknown): VimConfig {
     whichKey: input.whichKey ?? DEFAULT_WHICH_KEY,
     listContinuation: input.listContinuation ?? DEFAULT_LIST_CONTINUATION,
     completionScroll: input.completionScroll ?? DEFAULT_COMPLETION_SCROLL,
+    autoPairs: input.autoPairs ?? DEFAULT_AUTO_PAIRS_CONFIG,
     debug: input.debug ?? process.env.VIM_PROMPT_DEBUG === "1",
     debugPath: input.debugPath,
     keymaps: input.keymaps ?? {},
@@ -140,6 +145,7 @@ function readOptions(options: unknown): VimOptions {
     whichKey: readWhichKey(source.whichKey),
     listContinuation: readListContinuation(source.listContinuation),
     completionScroll: readCompletionScroll(source.completionScroll),
+    autoPairs: readAutoPairs(source.autoPairs),
     debug: typeof source.debug === "boolean" ? source.debug : undefined,
     debugPath: typeof source.debugPath === "string" ? source.debugPath : undefined,
     keymaps: readKeymaps(source.keymaps),
