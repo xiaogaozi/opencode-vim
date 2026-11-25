@@ -108,6 +108,7 @@ function VimHost(props: { context: Context }) {
       border: props.context.theme.border.base,
       text: props.context.theme.text.base,
       muted: props.context.theme.text.muted,
+      accent: props.context.theme.text.action.primary.selected,
       selected: {
         background: props.context.theme.background.action.primary.focused,
         foreground: props.context.theme.text.action.primary.focused,

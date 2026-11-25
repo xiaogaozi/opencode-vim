@@ -23,6 +23,8 @@ export type WhichKeyTheme = {
   border: RGBA
   text: RGBA
   muted: RGBA
+  /** Border of the highlighted row, like the host completion popup. */
+  accent: RGBA
   selected: {
     background: RGBA
     foreground: RGBA
@@ -30,7 +32,22 @@ export type WhichKeyTheme = {
 }
 
 const MAX_ROWS = 10
-const SELECT_HINT = "↑↓/<C-n>/<C-p> 选择 · Enter 执行 · Esc 取消"
+type HintPart = { text: string; emphasis: boolean }
+
+/** Key hints mirror the host footer: bright keys, muted actions. */
+function hintParts(pending: WhichKeyPending): HintPart[] {
+  return [
+    { text: pending.tokens.join(""), emphasis: true },
+    { text: " · ", emphasis: false },
+    { text: "↑↓/<C-n>/<C-p>", emphasis: true },
+    { text: " 选择 · ", emphasis: false },
+    { text: "Enter", emphasis: true },
+    { text: " 执行 · ", emphasis: false },
+    { text: "Esc", emphasis: true },
+    { text: " 取消", emphasis: false },
+  ]
+}
+
 const BORDER = "┃"
 const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" })
 
@@ -229,8 +246,8 @@ function render(
   const anchor = editorAnchor(input.renderer)
   const left = clamp(anchor.x, 0, Math.max(0, buffer.width - 4))
   const width = Math.max(8, Math.min(anchor.width ?? buffer.width - left, buffer.width - left))
-  const textX = left + 3
-  const textWidth = Math.max(0, width - (textX - left) - 2)
+  const textX = left + 2
+  const textWidth = Math.max(0, width - (textX - left) - 1)
   const keyWidth = Math.max(...options.map((option) => displayWidth(option.keys, method)))
   const { visible, more } = popupLayout(input, options.length)
   const contentRows = visible + (more ? 1 : 0)
@@ -249,6 +266,7 @@ function render(
     const y = top + index
     if (index < visible) {
       drawOption(buffer, options[index], left, y, width, keyWidth, index === selected, method, colors)
+      if (index === selected) buffer.drawText(BORDER, left, y, colors.accent)
     } else {
       buffer.drawText(
         truncateToWidth(`… +${options.length - visible} more`, textWidth, method),
@@ -261,8 +279,7 @@ function render(
   }
 
   // A blank row separates the candidates from the key hints below them.
-  const hint = truncateToWidth(`${pending.tokens.join("")} · ${SELECT_HINT}`, textWidth, method)
-  buffer.drawText(hint, textX, top + contentRows + 1, colors.muted, colors.surface)
+  drawHint(buffer, hintParts(pending), textX, textWidth, top + contentRows + 1, method, colors)
 }
 
 function drawOption(
@@ -276,9 +293,9 @@ function drawOption(
   method: WidthMethod,
   colors: WhichKeyTheme,
 ) {
-  const textX = left + 3
-  const textWidth = Math.max(0, width - (textX - left) - 2)
-  if (highlighted) buffer.fillRect(left + 2, y, Math.max(0, width - 4), 1, colors.selected.background)
+  const textX = left + 2
+  const textWidth = Math.max(0, width - (textX - left) - 1)
+  if (highlighted) buffer.fillRect(left + 1, y, Math.max(0, width - 2), 1, colors.selected.background)
   const background = highlighted ? colors.selected.background : colors.surface
   buffer.drawText(
     option.keys.padEnd(keyWidth, " "),
@@ -294,6 +311,28 @@ function drawOption(
     highlighted ? colors.selected.foreground : colors.muted,
     background,
   )
+}
+
+function drawHint(
+  buffer: OptimizedBuffer,
+  parts: readonly HintPart[],
+  x: number,
+  width: number,
+  y: number,
+  method: WidthMethod,
+  colors: WhichKeyTheme,
+) {
+  let cursor = x
+  let remaining = width
+  for (const part of parts) {
+    if (remaining <= 0) return
+    const text = truncateToWidth(part.text, remaining, method)
+    buffer.drawText(text, cursor, y, part.emphasis ? colors.text : colors.muted, colors.surface)
+    const used = displayWidth(text, method)
+    cursor += used
+    remaining -= used
+    if (text !== part.text) return
+  }
 }
 
 type EditorAnchorNode = {

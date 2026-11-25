@@ -77,8 +77,10 @@ pending, listing the mappings that start with the keys pressed so far:
 The popup is driven by `keymaps`: pressing `<C-g>` lists its `<C-g>...`
 mappings, pressing the next key narrows the list, and completing a mapping or
 leaving the pending state closes it. Candidates are listed in alphabetical
-order of their remaining keys, and the popup reuses the theme colors of
-OpenCode's own prompt completion. Descriptions are inferred from each mapping's
+order of their remaining keys, and the popup reuses the layout and theme colors
+of OpenCode's own prompt completion: a raised surface with side borders, a
+highlighted row that fills the popup and accents its left border, and key hints
+styled like the host footer. Descriptions are inferred from each mapping's
 action — `text:` payloads, `command:` titles, `agent:` steps, and Vim key
 sequences — or set explicitly with the object form described in
 [Custom Keymaps](./keymap-actions.md). `keymaps.session` and `keymaps.panes`
