@@ -14,6 +14,7 @@ const theme = {
   border: RGBA.fromHex("#484848"),
   text: RGBA.fromHex("#eeeeee"),
   muted: RGBA.fromHex("#808080"),
+  accent: RGBA.fromHex("#7699fe"),
   selected: {
     background: RGBA.fromHex("#264f78"),
     foreground: RGBA.fromHex("#ffffff"),
@@ -43,6 +44,18 @@ function rowBackground(text: string) {
   if (!fixture) throw new Error("fixture is not set")
   const spans = fixture.captureSpans().lines.flatMap((line) => line.spans)
   return spans.find((span) => span.text.includes(text))?.bg
+}
+
+function rowSpans(text: string) {
+  if (!fixture) throw new Error("fixture is not set")
+  const line = fixture.captureSpans().lines.find((line) =>
+    line.spans
+      .map((span) => span.text)
+      .join("")
+      .includes(text),
+  )
+  if (!line) throw new Error(`row ${text} is not drawn`)
+  return line.spans
 }
 
 describe("which-key popup", () => {
@@ -90,6 +103,35 @@ describe("which-key popup", () => {
     expect(panel.owns("<CR>", true)).toBeUndefined()
     expect(panel.owns("<C-n>", true)).toBeUndefined()
     expect(panel.owns("x", false)).toBeUndefined()
+
+    panel.dispose()
+  })
+
+  test("matches the host completion popup style", async () => {
+    fixture = await createFixture("", { defaultMode: "normal", keymaps, whichKey: { enabled: true } })
+    const panel = createPanel()
+
+    fixture.mockInput.pressKey("g", { ctrl: true })
+    await fixture.renderOnce()
+
+    // The highlighted row paints the whole interior and accents its left border.
+    const selected = rowSpans("second")
+    expect(selected[0]?.text).toBe("┃")
+    expect(selected[0]?.fg?.equals(theme.accent)).toBe(true)
+    expect(selected[selected.length - 1]?.fg?.equals(theme.border)).toBe(true)
+    const content = selected[1]
+    expect(content?.text.startsWith(" ")).toBe(true)
+    expect(content?.text.startsWith("  ")).toBe(false)
+    expect(content?.bg?.equals(theme.selected.background)).toBe(true)
+
+    // Other rows keep the base border.
+    const other = rowSpans("first")
+    expect(other[0]?.fg?.equals(theme.border)).toBe(true)
+
+    // Key hints use bright keys and muted actions, like the host footer.
+    const hint = rowSpans("<C-g> ·")
+    expect(hint.find((span) => span.text.includes("<C-g>"))?.fg?.equals(theme.text)).toBe(true)
+    expect(hint.find((span) => span.text.includes("选择"))?.fg?.equals(theme.muted)).toBe(true)
 
     panel.dispose()
   })
