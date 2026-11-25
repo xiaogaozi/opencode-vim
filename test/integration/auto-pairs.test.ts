@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { InputRenderable } from "@opentui/core"
+import { InputRenderable, type KeyEvent } from "@opentui/core"
 import { DEFAULT_AUTO_PAIRS } from "../../src/vim/auto-pairs"
 import { displayWidth } from "../../src/vim/map"
 import { createFixture } from "../helpers/fixture"
@@ -11,6 +11,10 @@ afterEach(() => {
   fixture?.dispose()
   fixture = undefined
 })
+
+function ctrlKey(key: string) {
+  return fixture!.adapter.handle({ name: key, ctrl: true } as KeyEvent, `<C-${key}>`, fixture!.context)
+}
 
 describe("auto pairs in the prompt", () => {
   test("completes every default pair and keeps the cursor inside", async () => {
@@ -124,6 +128,31 @@ describe("auto pairs in the prompt", () => {
 
     expect(fixture.input.plainText).toBe("")
     expect(fixture.input.cursorOffset).toBe(0)
+  })
+
+  test("ctrl+h removes an empty pair", async () => {
+    fixture = await createFixture("", { defaultMode: "insert", autoPairs: AUTO_PAIRS })
+    await fixture.keys("「")
+
+    expect(ctrlKey("h")).toBe(true)
+    expect(fixture.input.plainText).toBe("")
+    expect(fixture.input.cursorOffset).toBe(0)
+  })
+
+  test("ctrl+h leaves a nonempty pair to native deletion", async () => {
+    fixture = await createFixture("", { defaultMode: "insert", autoPairs: AUTO_PAIRS })
+    await fixture.keys("「a")
+
+    expect(ctrlKey("h")).toBe(false)
+    expect(fixture.input.plainText).toBe("「a」")
+  })
+
+  test("other ctrl chords do not remove a pair", async () => {
+    fixture = await createFixture("", { defaultMode: "insert", autoPairs: AUTO_PAIRS })
+    await fixture.keys("「")
+
+    expect(ctrlKey("w")).toBe(false)
+    expect(fixture.input.plainText).toBe("「」")
   })
 
   test("backspace inside a nonempty pair deletes one character", async () => {

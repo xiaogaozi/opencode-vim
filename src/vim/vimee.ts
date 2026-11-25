@@ -841,7 +841,11 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
   /** Completes a punctuation pair in insert mode, keeping native handling otherwise. */
   function handleAutoPair(event: KeyEvent, key: string, ctx: EditorContext): boolean {
     if (!config.autoPairs.enabled || options.readOnly) return false
-    if (event.ctrl || event.meta || event.option || event.super) return false
+    // Ctrl+H is a common Backspace binding, including in cli.json. Other
+    // modified keys keep their native or host-mapped behavior.
+    const ctrlH =
+      event.ctrl && !event.shift && !event.meta && !event.option && !event.super && event.name?.toLowerCase() === "h"
+    if ((event.ctrl && !ctrlH) || event.meta || event.option || event.super) return false
     const input = ctx.input()
     if (!input || input.isDestroyed) return false
     if (input.hasSelection?.()) return false
@@ -850,9 +854,13 @@ export function createVimeeAdapter(state: VimState, config: VimConfig, log: VimL
     const cursor = displayToChar(text, Math.max(0, input.cursorOffset), widthMethod)
     const canNest = key === "`" && nestedBacktick?.text === text && nestedBacktick.offset === input.cursorOffset
     nestedBacktick = undefined
-    const action = autoPairAction(key, text.slice(0, cursor), text.slice(cursor), config.autoPairs.pairs, {
-      nestBackticks: canNest,
-    })
+    const action = autoPairAction(
+      ctrlH ? "<BS>" : key,
+      text.slice(0, cursor),
+      text.slice(cursor),
+      config.autoPairs.pairs,
+      { nestBackticks: canNest },
+    )
     if (!action) return false
 
     const before = text.slice(0, cursor)
