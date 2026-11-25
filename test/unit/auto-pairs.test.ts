@@ -51,6 +51,38 @@ describe("auto pairs", () => {
     expect(autoPairAction('"', "", '"', pairs)).toEqual({ type: "skip", close: '"' })
     expect(autoPairAction('"', "text", "", pairs)).toEqual({ type: "insert", open: '"', close: '"' })
   })
+
+  test("nests repeated backticks only while the auto-inserted run continues", () => {
+    expect(autoPairAction("`", "`", "`", DEFAULT_AUTO_PAIRS)).toEqual({ type: "skip", close: "`" })
+    expect(autoPairAction("`", "`", "`", DEFAULT_AUTO_PAIRS, { nestBackticks: true })).toEqual({
+      type: "insert",
+      open: "`",
+      close: "`",
+    })
+    expect(autoPairAction("`", "``", "``", DEFAULT_AUTO_PAIRS, { nestBackticks: true })).toEqual({
+      type: "insert",
+      open: "`",
+      close: "`",
+    })
+  })
+
+  test("leaves other repeated same-character openers to native typing", () => {
+    expect(autoPairAction('"', '"', "", [['"', '"']] as const)).toBeUndefined()
+  })
+
+  test("completes, skips and removes a backtick pair", () => {
+    expect(autoPairAction("`", "text", "", DEFAULT_AUTO_PAIRS)).toEqual({
+      type: "insert",
+      open: "`",
+      close: "`",
+    })
+    expect(autoPairAction("`", "`code", "`", DEFAULT_AUTO_PAIRS)).toEqual({ type: "skip", close: "`" })
+    expect(autoPairAction("<BS>", "`", "`", DEFAULT_AUTO_PAIRS)).toEqual({
+      type: "backspace",
+      open: "`",
+      close: "`",
+    })
+  })
 })
 
 describe("auto pair config", () => {

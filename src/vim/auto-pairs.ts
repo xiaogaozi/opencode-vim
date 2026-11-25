@@ -10,6 +10,11 @@ export type AutoPairAction =
   | { readonly type: "skip"; readonly close: string }
   | { readonly type: "backspace"; readonly open: string; readonly close: string }
 
+export type AutoPairOptions = {
+  /** Continue the auto-inserted backtick pair from the previous key. */
+  nestBackticks?: boolean
+}
+
 export const DEFAULT_AUTO_PAIRS: readonly AutoPair[] = [
   ["「", "」"],
   ["『", "』"],
@@ -21,6 +26,7 @@ export const DEFAULT_AUTO_PAIRS: readonly AutoPair[] = [
   ["[", "]"],
   ["{", "}"],
   ["<", ">"],
+  ["`", "`"],
 ]
 
 export const DEFAULT_AUTO_PAIRS_CONFIG: VimAutoPairs = {
@@ -40,18 +46,28 @@ export function autoPairAction(
   before: string,
   after: string,
   pairs: readonly AutoPair[],
+  options: AutoPairOptions = {},
 ): AutoPairAction | undefined {
   if (key === "<BS>") {
     const pair = pairs.find(([open, close]) => before.endsWith(open) && after.startsWith(close))
     return pair ? { type: "backspace", open: pair[0], close: pair[1] } : undefined
   }
 
+  // An auto-inserted backtick pair keeps nesting while the key is pressed
+  // again, so consecutive presses grow 2 → 4 → 6 with the cursor in the middle.
+  if (key === "`" && options.nestBackticks && before.endsWith(key) && after.startsWith(key))
+    return { type: "insert", open: key, close: key }
+
   const closing = pairs.find(([, close]) => close === key)
   if (closing && after.startsWith(key)) return { type: "skip", close: key }
 
   const opening = pairs.find(([open]) => open === key)
-  if (opening) return { type: "insert", open: opening[0], close: opening[1] }
-  return undefined
+  if (!opening) return undefined
+
+  const [open, close] = opening
+  // Leave a repeated same-character opener to native typing for custom pairs.
+  if (open === close && open !== "`" && before.endsWith(open)) return undefined
+  return { type: "insert", open, close }
 }
 
 export function readAutoPairs(input: unknown): VimAutoPairs | undefined {

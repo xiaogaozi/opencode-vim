@@ -132,10 +132,13 @@ Set `enabled` to `false` to stop inserting list markers:
 prompt and question dialogs. Typing an opening character inserts its closing
 counterpart and leaves the cursor between them. Typing the closing character
 when it already follows the cursor moves over it, and `Backspace` between an
-empty pair removes both characters.
+empty pair removes both characters. `Ctrl+H` is treated as `Backspace` for this
+in insert mode, so it also removes an empty pair.
 
-The defaults are `「」`, `『』`, `（）`, `《》`, `【】`, `〈〉`, `()`, `[]`, `{}`, and
-`<>`. Enable them with:
+The defaults are `「」`, `『』`, `（）`, `《》`, `【】`, `〈〉`, `()`, `[]`, `{}`, `<>`,
+and a backtick pair. Repeated backticks inside an empty pair nest another pair,
+so consecutive presses grow 2 → 4 → 6 while the cursor stays in the middle.
+Enable them with:
 
 ```json
 {

@@ -26,9 +26,9 @@ Markdown list markers continue automatically on OpenCode's newline shortcuts and
 on `o`/`O`, including renumbering following same-level ordered items. Disable
 this with `options.vim.listContinuation.enabled`.
 
-Paired punctuation such as `「」`, `（）`, and `[]` can be completed in insert
-mode, with the cursor left inside the pair. Skip over the closing character or
-delete an empty pair with `Backspace`. Enable it with
+Paired punctuation such as `「」`, `（）`, `[]`, and backticks can be completed in
+insert mode, with the cursor left inside the pair. Skip over the closing
+character or delete an empty pair with `Backspace`. Enable it with
 `options.vim.autoPairs.enabled`.
 
 In a session, press `s` from normal mode to browse messages and tools. Use `j`/`k`

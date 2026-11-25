@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { InputRenderable } from "@opentui/core"
+import { InputRenderable, type KeyEvent } from "@opentui/core"
 import { DEFAULT_AUTO_PAIRS } from "../../src/vim/auto-pairs"
 import { displayWidth } from "../../src/vim/map"
 import { createFixture } from "../helpers/fixture"
@@ -11,6 +11,10 @@ afterEach(() => {
   fixture?.dispose()
   fixture = undefined
 })
+
+function ctrlKey(key: string) {
+  return fixture!.adapter.handle({ name: key, ctrl: true } as KeyEvent, `<C-${key}>`, fixture!.context)
+}
 
 describe("auto pairs in the prompt", () => {
   test("completes every default pair and keeps the cursor inside", async () => {
@@ -54,6 +58,58 @@ describe("auto pairs in the prompt", () => {
     expect(fixture.input.plainText).toBe("「」」")
   })
 
+  test("completes inline code and skips the closing backtick", async () => {
+    fixture = await createFixture("", { defaultMode: "insert", autoPairs: AUTO_PAIRS })
+    await fixture.keys("`code`")
+
+    expect(fixture.input.plainText).toBe("`code`")
+    expect(fixture.input.cursorOffset).toBe(displayWidth("`code`"))
+  })
+
+  test("nests repeated backticks 2 → 4 → 6 with the cursor in the middle", async () => {
+    fixture = await createFixture("", { defaultMode: "insert", autoPairs: AUTO_PAIRS })
+
+    await fixture.keys("`")
+    expect(fixture.input.plainText).toBe("``")
+    expect(fixture.input.cursorOffset).toBe(1)
+
+    await fixture.keys("`")
+    expect(fixture.input.plainText).toBe("````")
+    expect(fixture.input.cursorOffset).toBe(2)
+
+    await fixture.keys("`")
+    expect(fixture.input.plainText).toBe("``````")
+    expect(fixture.input.cursorOffset).toBe(3)
+  })
+
+  test("types a fence language between the opening and closing triples", async () => {
+    fixture = await createFixture("", { defaultMode: "insert", autoPairs: AUTO_PAIRS })
+    await fixture.keys("```ts")
+
+    expect(fixture.input.plainText).toBe("```ts```")
+    expect(fixture.input.cursorOffset).toBe(displayWidth("```ts"))
+  })
+
+  test("skips the closing triple after fence content", async () => {
+    fixture = await createFixture("", { defaultMode: "insert", autoPairs: AUTO_PAIRS })
+    await fixture.keys("```ts")
+    await fixture.keys("```")
+
+    expect(fixture.input.plainText).toBe("```ts```")
+    expect(fixture.input.cursorOffset).toBe(displayWidth("```ts```"))
+  })
+
+  test("backspace removes an empty backtick pair", async () => {
+    fixture = await createFixture("", { defaultMode: "insert", autoPairs: AUTO_PAIRS })
+    await fixture.keys("`")
+
+    fixture.mockInput.pressBackspace()
+    await fixture.renderOnce()
+
+    expect(fixture.input.plainText).toBe("")
+    expect(fixture.input.cursorOffset).toBe(0)
+  })
+
   test("undoes the pair with the insert session", async () => {
     fixture = await createFixture("", { defaultMode: "normal", autoPairs: AUTO_PAIRS })
     await fixture.keys("i「")
@@ -72,6 +128,31 @@ describe("auto pairs in the prompt", () => {
 
     expect(fixture.input.plainText).toBe("")
     expect(fixture.input.cursorOffset).toBe(0)
+  })
+
+  test("ctrl+h removes an empty pair", async () => {
+    fixture = await createFixture("", { defaultMode: "insert", autoPairs: AUTO_PAIRS })
+    await fixture.keys("「")
+
+    expect(ctrlKey("h")).toBe(true)
+    expect(fixture.input.plainText).toBe("")
+    expect(fixture.input.cursorOffset).toBe(0)
+  })
+
+  test("ctrl+h leaves a nonempty pair to native deletion", async () => {
+    fixture = await createFixture("", { defaultMode: "insert", autoPairs: AUTO_PAIRS })
+    await fixture.keys("「a")
+
+    expect(ctrlKey("h")).toBe(false)
+    expect(fixture.input.plainText).toBe("「a」")
+  })
+
+  test("other ctrl chords do not remove a pair", async () => {
+    fixture = await createFixture("", { defaultMode: "insert", autoPairs: AUTO_PAIRS })
+    await fixture.keys("「")
+
+    expect(ctrlKey("w")).toBe(false)
+    expect(fixture.input.plainText).toBe("「」")
   })
 
   test("backspace inside a nonempty pair deletes one character", async () => {
