@@ -54,6 +54,58 @@ describe("auto pairs in the prompt", () => {
     expect(fixture.input.plainText).toBe("「」」")
   })
 
+  test("completes inline code and skips the closing backtick", async () => {
+    fixture = await createFixture("", { defaultMode: "insert", autoPairs: AUTO_PAIRS })
+    await fixture.keys("`code`")
+
+    expect(fixture.input.plainText).toBe("`code`")
+    expect(fixture.input.cursorOffset).toBe(displayWidth("`code`"))
+  })
+
+  test("nests repeated backticks 2 → 4 → 6 with the cursor in the middle", async () => {
+    fixture = await createFixture("", { defaultMode: "insert", autoPairs: AUTO_PAIRS })
+
+    await fixture.keys("`")
+    expect(fixture.input.plainText).toBe("``")
+    expect(fixture.input.cursorOffset).toBe(1)
+
+    await fixture.keys("`")
+    expect(fixture.input.plainText).toBe("````")
+    expect(fixture.input.cursorOffset).toBe(2)
+
+    await fixture.keys("`")
+    expect(fixture.input.plainText).toBe("``````")
+    expect(fixture.input.cursorOffset).toBe(3)
+  })
+
+  test("types a fence language between the opening and closing triples", async () => {
+    fixture = await createFixture("", { defaultMode: "insert", autoPairs: AUTO_PAIRS })
+    await fixture.keys("```ts")
+
+    expect(fixture.input.plainText).toBe("```ts```")
+    expect(fixture.input.cursorOffset).toBe(displayWidth("```ts"))
+  })
+
+  test("skips the closing triple after fence content", async () => {
+    fixture = await createFixture("", { defaultMode: "insert", autoPairs: AUTO_PAIRS })
+    await fixture.keys("```ts")
+    await fixture.keys("```")
+
+    expect(fixture.input.plainText).toBe("```ts```")
+    expect(fixture.input.cursorOffset).toBe(displayWidth("```ts```"))
+  })
+
+  test("backspace removes an empty backtick pair", async () => {
+    fixture = await createFixture("", { defaultMode: "insert", autoPairs: AUTO_PAIRS })
+    await fixture.keys("`")
+
+    fixture.mockInput.pressBackspace()
+    await fixture.renderOnce()
+
+    expect(fixture.input.plainText).toBe("")
+    expect(fixture.input.cursorOffset).toBe(0)
+  })
+
   test("undoes the pair with the insert session", async () => {
     fixture = await createFixture("", { defaultMode: "normal", autoPairs: AUTO_PAIRS })
     await fixture.keys("i「")
